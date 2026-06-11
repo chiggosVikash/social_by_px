@@ -15,11 +15,13 @@ class Settings(BaseSettings):
     @property
     def ASYNC_DATABASE_URL(self) -> str:
         """Derive async URL from DATABASE_URL by injecting the asyncpg driver."""
-        return self.DATABASE_URL.replace(
+        async_url = self.DATABASE_URL.replace(
             "postgresql://", "postgresql+asyncpg://", 1
         ).replace(
             "postgresql+psycopg2://", "postgresql+asyncpg://", 1
         )
+        # asyncpg doesn't understand sslmode or channel_binding
+        return async_url.replace("sslmode=require", "ssl=require").replace("&channel_binding=require", "")
     
     # Redis
     REDIS_URL: str

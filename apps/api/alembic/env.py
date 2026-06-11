@@ -22,7 +22,7 @@ settings = get_settings()
 config = context.config
 
 # Set the sqlalchemy.url dynamically
-config.set_main_option("sqlalchemy.url", settings.SYNC_DATABASE_URL)
+config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)
 
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.

@@ -2,7 +2,7 @@ import { ApprovalList, ApprovalItem } from "@/components/ApprovalList";
 
 async function getPendingApprovals(): Promise<ApprovalItem[]> {
   // Mock fetch, replace with actual API call to FastAPI
-  // e.g. await fetch("http://127.0.0.1:8000/approvals/pending", { cache: "no-store" })
+  // e.g. await fetch(`${process.env.NEXT_PUBLIC_API_URL}/approvals/pending`, { cache: "no-store" })
   return [
     {
       id: 1,

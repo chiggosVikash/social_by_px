@@ -12,11 +12,11 @@ router = APIRouter(prefix="/projects", tags=["projects"])
 async def get_current_user_id() -> int:
     return 1 # We will implement real auth later
 
-@router.post("/", response_model=ProjectResponse, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=ProjectResponse, status_code=status.HTTP_201_CREATED)
 async def create_project(project_in: ProjectCreate, db: AsyncSession = Depends(get_db), current_user_id: int = Depends(get_current_user_id)):
     return await project_repo.create_with_keywords(db=db, obj_in=project_in, owner_id=current_user_id)
 
-@router.get("/", response_model=List[ProjectResponse])
+@router.get("", response_model=List[ProjectResponse])
 async def list_projects(db: AsyncSession = Depends(get_db), current_user_id: int = Depends(get_current_user_id)):
     return await project_repo.get_multi_by_owner(db=db, owner_id=current_user_id)
 

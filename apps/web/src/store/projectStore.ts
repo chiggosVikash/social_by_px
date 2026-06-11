@@ -28,7 +28,8 @@ export const useProjectStore = create<ProjectStore>()(
     fetchProjects: async () => {
       set({ isLoading: true, error: null });
       try {
-        const response = await axios.get<Project[]>('http://127.0.0.1:8000/projects');
+        const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+        const response = await axios.get<Project[]>(`${API_URL}/projects`);
         set({ projects: response.data, isLoading: false });
       } catch {
         set({ error: 'Failed to fetch projects', isLoading: false });
