@@ -1,27 +1,20 @@
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+"use client";
+
+import { useEffect } from "react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Plus, Settings, Play, LayoutGrid, ArrowRight } from "lucide-react";
+import { Plus, Settings, Play, LayoutGrid, ArrowRight, Loader2 } from "lucide-react";
 import Link from "next/link";
+import { useProjectStore } from "@/store/projectStore";
 
-interface Project {
-  id: number;
-  name: string;
-  industry: string;
-}
+export default function DashboardPage() {
+  const projects = useProjectStore((state) => state.projects);
+  const isLoading = useProjectStore((state) => state.isLoading);
+  const fetchProjects = useProjectStore((state) => state.fetchProjects);
 
-async function getProjects(): Promise<Project[]> {
-  try {
-    const res = await fetch("http://127.0.0.1:8000/projects", { cache: "no-store" });
-    if (!res.ok) return [];
-    return await res.json();
-  } catch (e) {
-    // Return empty if backend is down during MVP
-    return [];
-  }
-}
-
-export default async function DashboardPage() {
-  const projects = await getProjects();
+  useEffect(() => {
+    fetchProjects();
+  }, [fetchProjects]);
 
   return (
     <div className="space-y-10 animate-in fade-in duration-500">
@@ -41,57 +34,63 @@ export default async function DashboardPage() {
         </Button>
       </div>
 
-      {/* Projects Grid */}
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-        {projects.map((project) => (
-          <Card key={project.id} className="group overflow-hidden border border-border/50 bg-card hover:bg-accent/5 transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:border-primary/30 relative">
-            {/* Top accent line on hover */}
-            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-primary to-destructive opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-            
-            <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-4">
-              <div className="space-y-1.5">
-                <CardTitle className="text-2xl font-heading font-bold tracking-tight group-hover:text-primary transition-colors">
-                  {project.name}
-                </CardTitle>
-                <div className="inline-flex items-center rounded-full bg-secondary px-2.5 py-0.5 text-xs font-medium text-secondary-foreground">
-                  {project.industry}
+      {isLoading ? (
+        <div className="flex justify-center items-center py-20">
+          <Loader2 className="w-8 h-8 animate-spin text-primary" />
+        </div>
+      ) : (
+        /* Projects Grid */
+        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+          {projects.map((project) => (
+            <Card key={project.id} className="group overflow-hidden border border-border/50 bg-card hover:bg-accent/5 transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:border-primary/30 relative">
+              {/* Top accent line on hover */}
+              <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-primary to-destructive opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+              
+              <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-4">
+                <div className="space-y-1.5">
+                  <CardTitle className="text-2xl font-heading font-bold tracking-tight group-hover:text-primary transition-colors">
+                    {project.name}
+                  </CardTitle>
+                  <div className="inline-flex items-center rounded-full bg-secondary px-2.5 py-0.5 text-xs font-medium text-secondary-foreground">
+                    {project.industry}
+                  </div>
                 </div>
+                <Link href={`/projects/${project.id}/settings`}>
+                  <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-primary hover:bg-primary/10 rounded-full h-9 w-9">
+                    <Settings className="h-4 w-4" />
+                  </Button>
+                </Link>
+              </CardHeader>
+              <CardContent>
+                <div className="pt-4 mt-2 border-t border-border/40">
+                  <Button className="w-full justify-between rounded-lg font-medium bg-secondary text-secondary-foreground hover:bg-primary hover:text-primary-foreground group/btn transition-colors">
+                    <span className="flex items-center">
+                      <Play className="mr-2 h-4 w-4" /> Run Workflow
+                    </span>
+                    <ArrowRight className="h-4 w-4 opacity-50 group-hover/btn:opacity-100 group-hover/btn:translate-x-1 transition-all" />
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+          
+          {/* Empty State */}
+          {projects.length === 0 && (
+            <div className="col-span-full flex flex-col items-center justify-center p-12 text-center border-2 rounded-2xl border-dashed border-border/60 bg-card/30 hover:bg-card/50 transition-colors">
+              <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mb-6">
+                <LayoutGrid className="h-8 w-8 text-primary" />
               </div>
-              <Link href={`/projects/${project.id}/settings`}>
-                <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-primary hover:bg-primary/10 rounded-full h-9 w-9">
-                  <Settings className="h-4 w-4" />
-                </Button>
-              </Link>
-            </CardHeader>
-            <CardContent>
-              <div className="pt-4 mt-2 border-t border-border/40">
-                <Button className="w-full justify-between rounded-lg font-medium bg-secondary text-secondary-foreground hover:bg-primary hover:text-primary-foreground group/btn transition-colors">
-                  <span className="flex items-center">
-                    <Play className="mr-2 h-4 w-4" /> Run Workflow
-                  </span>
-                  <ArrowRight className="h-4 w-4 opacity-50 group-hover/btn:opacity-100 group-hover/btn:translate-x-1 transition-all" />
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-        
-        {/* Empty State */}
-        {projects.length === 0 && (
-          <div className="col-span-full flex flex-col items-center justify-center p-12 text-center border-2 rounded-2xl border-dashed border-border/60 bg-card/30 hover:bg-card/50 transition-colors">
-            <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mb-6">
-              <LayoutGrid className="h-8 w-8 text-primary" />
+              <h3 className="text-2xl font-heading font-bold mb-3 tracking-tight">No projects yet</h3>
+              <p className="text-muted-foreground mb-8 max-w-md font-medium">
+                Create your first project to start generating carousels. Automated social content is just a few clicks away.
+              </p>
+              <Button size="lg" className="rounded-xl shadow-md hover:shadow-lg transition-all hover:-translate-y-0.5">
+                <Plus className="mr-2 h-5 w-5" /> Create First Project
+              </Button>
             </div>
-            <h3 className="text-2xl font-heading font-bold mb-3 tracking-tight">No projects yet</h3>
-            <p className="text-muted-foreground mb-8 max-w-md font-medium">
-              Create your first project to start generating carousels. Automated social content is just a few clicks away.
-            </p>
-            <Button size="lg" className="rounded-xl shadow-md hover:shadow-lg transition-all hover:-translate-y-0.5">
-              <Plus className="mr-2 h-5 w-5" /> Create First Project
-            </Button>
-          </div>
-        )}
-      </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
