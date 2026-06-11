@@ -30,6 +30,6 @@ class CRUDSocialAccount(CRUDBase[SocialAccount, SocialAccountCreate]):
     async def get_multi_by_owner(self, db: AsyncSession, *, owner_id: int) -> List[SocialAccount]:
         stmt = select(SocialAccount).where(SocialAccount.owner_id == owner_id)
         result = await db.execute(stmt)
-        return result.scalars().all()
+        return list(result.scalars().all())
 
 social_account_repo = CRUDSocialAccount(SocialAccount)

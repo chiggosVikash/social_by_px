@@ -21,7 +21,11 @@ class CRUDProject(CRUDBase[Project, ProjectCreate]):
             db.add(db_kw)
             
         await db.commit()
-        return await self.get_with_keywords(db, id=db_project.id, owner_id=owner_id)
+        from typing import cast
+        result = await self.get_with_keywords(db, id=cast(int, db_project.id), owner_id=owner_id)
+        if not result:
+            raise RuntimeError("Failed to fetch created project")
+        return result
 
     async def get_with_keywords(self, db: AsyncSession, *, id: int, owner_id: int) -> Optional[Project]:
         stmt = select(Project).options(selectinload(Project.keywords)).where(
@@ -36,6 +40,6 @@ class CRUDProject(CRUDBase[Project, ProjectCreate]):
             Project.owner_id == owner_id
         )
         result = await db.execute(stmt)
-        return result.scalars().all()
+        return list(result.scalars().all())
 
 project_repo = CRUDProject(Project)

@@ -3,8 +3,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy import update, delete
 
+from pydantic import BaseModel
+
 ModelType = TypeVar("ModelType")
-CreateSchemaType = TypeVar("CreateSchemaType")
+CreateSchemaType = TypeVar("CreateSchemaType", bound=BaseModel)
 
 class CRUDBase(Generic[ModelType, CreateSchemaType]):
     def __init__(self, model: Type[ModelType]):
@@ -14,12 +16,12 @@ class CRUDBase(Generic[ModelType, CreateSchemaType]):
         self.model = model
 
     async def get(self, db: AsyncSession, id: Any) -> Optional[ModelType]:
-        result = await db.execute(select(self.model).filter(self.model.id == id))
+        result = await db.execute(select(self.model).filter(getattr(self.model, "id") == id))
         return result.scalar_one_or_none()
 
     async def get_multi(self, db: AsyncSession, *, skip: int = 0, limit: int = 100) -> List[ModelType]:
         result = await db.execute(select(self.model).offset(skip).limit(limit))
-        return result.scalars().all()
+        return list(result.scalars().all())
 
     async def create(self, db: AsyncSession, *, obj_in: CreateSchemaType, **kwargs) -> ModelType:
         obj_in_data = obj_in.model_dump()
