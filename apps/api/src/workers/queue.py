@@ -1,0 +1,20 @@
+import redis
+from rq import Queue
+from src.core.config import get_settings
+
+settings = get_settings()
+
+redis_conn = redis.from_url(settings.REDIS_URL)
+
+# High priority queue for workflow orchestration
+workflow_queue = Queue('workflow', connection=redis_conn)
+
+# Default queue for rendering and publishing
+default_queue = Queue('default', connection=redis_conn)
+
+def enqueue_workflow(project_id: int):
+    """Enqueues a new workflow execution for a project."""
+    # Importing here to avoid circular imports if needed
+    from src.workers.tasks import run_workflow_task
+    job = workflow_queue.enqueue(run_workflow_task, project_id)
+    return job.id
