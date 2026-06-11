@@ -2,9 +2,9 @@ from typing import List, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload
-from src.repositories.base import CRUDBase
-from src.models.core import Project, ProjectKeyword
-from src.schemas.project import ProjectCreate
+from repositories.base import CRUDBase
+from models.core import Project, ProjectKeyword
+from schemas.project import ProjectCreate
 
 class CRUDProject(CRUDBase[Project, ProjectCreate]):
     async def create_with_keywords(self, db: AsyncSession, *, obj_in: ProjectCreate, owner_id: int) -> Project:

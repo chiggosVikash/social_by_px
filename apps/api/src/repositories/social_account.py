@@ -1,10 +1,10 @@
 from typing import List, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-from src.repositories.base import CRUDBase
-from src.models.core import SocialAccount
-from src.schemas.social_account import SocialAccountCreate
-from src.core.security import encrypt_token
+from repositories.base import CRUDBase
+from models.core import SocialAccount
+from schemas.social_account import SocialAccountCreate
+from core.security import encrypt_token
 
 class CRUDSocialAccount(CRUDBase[SocialAccount, SocialAccountCreate]):
     async def create_with_owner(self, db: AsyncSession, *, obj_in: SocialAccountCreate, owner_id: int) -> SocialAccount:

@@ -1,6 +1,6 @@
-from src.services.publishers.base import SocialPublisher
-from src.services.publishers.instagram import InstagramPublisher
-from src.services.publishers.facebook import FacebookPublisher
+from services.publishers.base import SocialPublisher
+from services.publishers.instagram import InstagramPublisher
+from services.publishers.facebook import FacebookPublisher
 
 class PublisherFactory:
     @staticmethod

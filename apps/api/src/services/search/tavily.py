@@ -1,6 +1,6 @@
 from typing import List, Dict
 from tavily import TavilyClient
-from src.services.search.base import SearchService
+from services.search.base import SearchService
 
 class TavilySearchService(SearchService):
     def __init__(self, api_key: str):

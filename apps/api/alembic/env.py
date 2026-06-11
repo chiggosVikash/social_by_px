@@ -11,8 +11,9 @@ from sqlalchemy import pool
 from alembic import context
 
 # Import settings and set the sqlalchemy.url dynamically
-from src.core.config import get_settings
-from src.db.base import Base
+from core.config import get_settings
+from db.base import Base
+import models.core  # noqa: F401 — registers all models with Base.metadata
 
 settings = get_settings()
 

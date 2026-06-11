@@ -1,4 +1,5 @@
 from langgraph.graph import StateGraph, END
+from langgraph.graph.state import CompiledStateGraph
 from .state import GraphState
 from .nodes import (
     research_agent,
@@ -29,8 +30,8 @@ def is_content_valid(state: GraphState) -> str:
         return "publish"
     return "regenerate"
 
-def build_graph() -> StateGraph:
-    workflow = StateGraph(GraphState)
+def build_graph() -> CompiledStateGraph[GraphState, None, GraphState, GraphState]:  # type: ignore[type-var]
+    workflow = StateGraph[GraphState](GraphState)  # type: ignore[type-var]
     
     workflow.add_node("research", research_agent)
     workflow.add_node("verify", verification_agent)

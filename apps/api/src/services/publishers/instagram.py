@@ -1,6 +1,6 @@
 import httpx
 from typing import List
-from src.services.publishers.base import SocialPublisher
+from services.publishers.base import SocialPublisher
 
 META_GRAPH_API_URL = "https://graph.facebook.com/v19.0"
 

@@ -2,10 +2,10 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List
 
-from src.db.session import get_db
-from src.schemas.social_account import SocialAccountCreate, SocialAccountUpdate, SocialAccountResponse
-from src.api.projects import get_current_user_id # reusing the mock
-from src.repositories.social_account import social_account_repo
+from db.session import get_db
+from schemas.social_account import SocialAccountCreate, SocialAccountUpdate, SocialAccountResponse
+from api.projects import get_current_user_id # reusing the mock
+from repositories.social_account import social_account_repo
 
 router = APIRouter(prefix="/social-accounts", tags=["social-accounts"])
 

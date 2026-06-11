@@ -1,6 +1,6 @@
 import boto3
 from botocore.config import Config
-from src.core.config import get_settings
+from core.config import get_settings
 
 settings = get_settings()
 
