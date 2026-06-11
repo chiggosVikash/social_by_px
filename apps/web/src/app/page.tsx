@@ -3,9 +3,19 @@
 import { useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Plus, Settings, Play, LayoutGrid, ArrowRight, Loader2 } from "lucide-react";
+import { Plus, Settings, Play, LayoutGrid, ArrowRight, MoreVertical, Edit, Copy, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useProjectStore } from "@/store/projectStore";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 export default function DashboardPage() {
   const projects = useProjectStore((state) => state.projects);
@@ -17,13 +27,10 @@ export default function DashboardPage() {
   }, [fetchProjects]);
 
   return (
-    <div className="space-y-10 animate-in fade-in duration-500">
+    <div className="space-y-8 animate-in fade-in duration-500 max-w-7xl mx-auto">
       {/* Block-Based Header */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-card/80 border border-border/40 p-6 md:p-8 rounded-2xl shadow-sm backdrop-blur-xl">
-        <div className="space-y-2">
-          <div className="inline-flex items-center rounded-full border border-primary/20 bg-primary/10 px-2.5 py-0.5 text-xs font-semibold text-primary mb-2 transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2">
-            Workspace
-          </div>
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div className="space-y-1">
           <h1 className="text-3xl md:text-4xl font-heading font-bold tracking-tight text-foreground">
             Projects
           </h1>
@@ -35,8 +42,26 @@ export default function DashboardPage() {
       </div>
 
       {isLoading ? (
-        <div className="flex justify-center items-center py-20">
-          <Loader2 className="w-8 h-8 animate-spin text-primary" />
+        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+          {[1, 2, 3].map((i) => (
+            <Card key={i} className="overflow-hidden border border-border/50 bg-card">
+              <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-4">
+                <div className="flex items-center gap-4">
+                  <Skeleton className="h-12 w-12 rounded-full" />
+                  <div className="space-y-2">
+                    <Skeleton className="h-5 w-32" />
+                    <Skeleton className="h-4 w-20" />
+                  </div>
+                </div>
+                <Skeleton className="h-8 w-8 rounded-full" />
+              </CardHeader>
+              <CardContent>
+                <div className="pt-4 mt-2 border-t border-border/40">
+                  <Skeleton className="h-10 w-full rounded-lg" />
+                </div>
+              </CardContent>
+            </Card>
+          ))}
         </div>
       ) : (
         /* Projects Grid */
@@ -47,19 +72,46 @@ export default function DashboardPage() {
               <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-primary to-destructive opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
               
               <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-4">
-                <div className="space-y-1.5">
-                  <CardTitle className="text-2xl font-heading font-bold tracking-tight group-hover:text-primary transition-colors">
-                    {project.name}
-                  </CardTitle>
-                  <div className="inline-flex items-center rounded-full bg-secondary px-2.5 py-0.5 text-xs font-medium text-secondary-foreground">
-                    {project.industry}
+                <div className="flex items-center gap-4">
+                  <Avatar className="h-12 w-12 border-2 border-primary/20 shadow-sm">
+                    <AvatarFallback className="bg-primary/10 text-primary font-bold font-heading">
+                      {project.name.substring(0, 2).toUpperCase()}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="space-y-1">
+                    <CardTitle className="text-xl font-heading font-bold tracking-tight group-hover:text-primary transition-colors line-clamp-1">
+                      {project.name}
+                    </CardTitle>
+                    <Badge variant="secondary" className="font-medium">
+                      {project.industry}
+                    </Badge>
                   </div>
                 </div>
-                <Link href={`/projects/${project.id}/settings`}>
-                  <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-primary hover:bg-primary/10 rounded-full h-9 w-9">
-                    <Settings className="h-4 w-4" />
-                  </Button>
-                </Link>
+                <DropdownMenu>
+                  <DropdownMenuTrigger render={<Button variant="ghost" size="icon" className="text-muted-foreground hover:text-foreground hover:bg-accent rounded-full h-8 w-8 -mr-2" />}>
+                    <MoreVertical className="h-4 w-4" />
+                    <span className="sr-only">Open menu</span>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-[160px]">
+                    <DropdownMenuItem render={<Link href={`/projects/${project.id}/settings`} className="cursor-pointer" />}>
+                      <Settings className="mr-2 h-4 w-4" />
+                      Settings
+                    </DropdownMenuItem>
+                    <DropdownMenuItem>
+                      <Edit className="mr-2 h-4 w-4" />
+                      Edit Details
+                    </DropdownMenuItem>
+                    <DropdownMenuItem>
+                      <Copy className="mr-2 h-4 w-4" />
+                      Duplicate
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem className="text-destructive focus:text-destructive">
+                      <Trash2 className="mr-2 h-4 w-4" />
+                      Delete Project
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </CardHeader>
               <CardContent>
                 <div className="pt-4 mt-2 border-t border-border/40">
@@ -76,13 +128,13 @@ export default function DashboardPage() {
           
           {/* Empty State */}
           {projects.length === 0 && (
-            <div className="col-span-full flex flex-col items-center justify-center p-12 text-center border-2 rounded-2xl border-dashed border-border/60 bg-card/30 hover:bg-card/50 transition-colors">
-              <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mb-6">
+            <div className="col-span-full flex flex-col items-center justify-center py-20 px-4 text-center border border-dashed border-border/60 bg-card/30 hover:bg-card/50 transition-colors rounded-2xl">
+              <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center mb-6 shadow-inner">
                 <LayoutGrid className="h-8 w-8 text-primary" />
               </div>
-              <h3 className="text-2xl font-heading font-bold mb-3 tracking-tight">No projects yet</h3>
+              <h3 className="text-2xl font-heading font-bold mb-2 tracking-tight">No projects found</h3>
               <p className="text-muted-foreground mb-8 max-w-md font-medium">
-                Create your first project to start generating carousels. Automated social content is just a few clicks away.
+                Create your first project to start generating automated social content workflows.
               </p>
               <Button size="lg" className="rounded-xl shadow-md hover:shadow-lg transition-all hover:-translate-y-0.5">
                 <Plus className="mr-2 h-5 w-5" /> Create First Project

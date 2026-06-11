@@ -30,7 +30,7 @@ export const useProjectStore = create<ProjectStore>()(
       try {
         const response = await axios.get<Project[]>('http://127.0.0.1:8000/projects');
         set({ projects: response.data, isLoading: false });
-      } catch (error) {
+      } catch {
         set({ error: 'Failed to fetch projects', isLoading: false });
       }
     },

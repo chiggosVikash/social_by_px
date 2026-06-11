@@ -38,15 +38,21 @@ git checkout -b fix/your-bug-fix
 
 This project adheres to SOLID principles and Gang of Four (GoF) design patterns. Please ensure your contributions maintain these standards:
 
-- **Backend (`apps/api`)**:
-  - **Repository Pattern**: Never write SQLAlchemy `select` or `commit` statements in FastAPI routers. Use the classes in `src/repositories/`.
-  - **Strategy & Factory Patterns**: If adding a new social media publisher or a new search integration, extend the `SocialPublisher` or `SearchService` abstract base classes. Register your new strategy in the respective Factory.
-  - **Single Responsibility Principle**: Keep routers thin. Move business logic to services or LangGraph agents.
-  - **Dependency Injection**: Use FastAPI `Depends()` for injecting repositories and database sessions.
+#### Backend (`apps/api`)
 
-- **Frontend (`apps/web`)**:
-  - **React Server Components (RSC)**: Keep data fetching in Server Components (`page.tsx`) and interactivity in Client Components (`"use client"`).
-  - Use **Tailwind CSS** for styling. Avoid custom CSS files unless strictly necessary.
+- **Repository Pattern**: Never write SQLAlchemy `select` or `commit` statements in FastAPI routers. Use the classes in `src/repositories/`.
+- **Strategy & Factory Patterns**: If adding a new social media publisher or a new search integration, extend the `SocialPublisher` or `SearchService` abstract base classes. Register your new strategy in the respective Factory.
+- **Single Responsibility Principle**: Keep routers thin. Move business logic to services or LangGraph agents.
+- **Dependency Injection**: Use FastAPI `Depends()` for injecting repositories and database sessions.
+- **Code Style**: We use standard Python formatting tools. Be sure your code is clean and typed.
+
+#### Frontend (`apps/web`)
+
+- **React Server Components (RSC)**: Keep data fetching in Server Components (`page.tsx`) where appropriate, and interactivity in Client Components (`"use client"`).
+- **State Management**: Use Zustand (`src/store/`) for global state management.
+- **UI Framework**: Use **shadcn/ui** for building reusable React components.
+- **Styling**: Use **Tailwind CSS** for styling. Avoid custom CSS files unless strictly necessary.
+- **Code Style**: Run `pnpm lint` before pushing your changes to ensure no ESLint errors exist.
 
 ### 3. Commit Your Changes
 
