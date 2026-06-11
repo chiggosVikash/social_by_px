@@ -1,8 +1,8 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from src.core.config import get_settings
+from core.config import get_settings
 
-from src.api import projects, social_accounts
+from api import projects, social_accounts
 
 settings = get_settings()
 

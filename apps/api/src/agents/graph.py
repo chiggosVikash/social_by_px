@@ -1,6 +1,6 @@
 from langgraph.graph import StateGraph, END
-from src.agents.state import GraphState
-from src.agents.nodes import (
+from .state import GraphState
+from .nodes import (
     research_agent,
     verification_agent,
     query_refinement_agent,

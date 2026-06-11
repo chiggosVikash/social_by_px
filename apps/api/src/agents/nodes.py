@@ -1,10 +1,10 @@
 import json
-from src.agents.state import GraphState, ArticleData, SlideData
+from .state import GraphState, ArticleData, SlideData
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import SystemMessage, HumanMessage
-from src.core.config import get_settings
+from core.config import get_settings
 
-from src.services.search.tavily import TavilySearchService
+from services.search.tavily import TavilySearchService
 
 settings = get_settings()
 

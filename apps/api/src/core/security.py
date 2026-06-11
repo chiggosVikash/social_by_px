@@ -1,5 +1,5 @@
 from cryptography.fernet import Fernet
-from src.core.config import get_settings
+from core.config import get_settings
 
 settings = get_settings()
 fernet = Fernet(settings.ENCRYPTION_KEY.encode('utf-8'))
