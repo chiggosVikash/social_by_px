@@ -54,22 +54,46 @@ function ProjectCard({ project }: { project: Project }) {
   }, [project.id, fetchProjectStatus]);
 
   useEffect(() => {
-    const wsUrl = `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/v1/ws/projects/${project.id}/progress`.replace("http", "ws");
-    const ws = new WebSocket(wsUrl);
+    let ws: WebSocket | null = null;
+    let reconnectTimeout: NodeJS.Timeout;
+    let isMounted = true;
 
-    ws.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
-        setStatus(data.status);
-        setProgressValue(data.progress);
-        setIsFailed(data.is_failed);
-      } catch (e) {
-        console.error("Failed to parse websocket message", e);
-      }
+    const connect = () => {
+      // Strip /api/v1 suffix if present in the env var, then build the WS path
+      const baseUrl = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000').replace(/\/api\/v1\/?$/, '');
+      const wsUrl = `${baseUrl}/api/v1/ws/projects/${project.id}/progress`.replace(/^http/, "ws");
+      ws = new WebSocket(wsUrl);
+
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          setStatus(data.status);
+          setProgressValue(data.progress);
+          setIsFailed(data.is_failed);
+        } catch (e) {
+          console.error("Failed to parse websocket message", e);
+        }
+      };
+
+      ws.onclose = () => {
+        // Reconnect after 3 seconds if the component is still mounted
+        if (isMounted) {
+          reconnectTimeout = setTimeout(connect, 3000);
+        }
+      };
+
+      ws.onerror = (err) => {
+        console.warn(`WebSocket error for project ${project.id}, will reconnect...`);
+        ws?.close();
+      };
     };
 
+    connect();
+
     return () => {
-      ws.close();
+      isMounted = false;
+      clearTimeout(reconnectTimeout);
+      ws?.close();
     };
   }, [project.id]);
 
