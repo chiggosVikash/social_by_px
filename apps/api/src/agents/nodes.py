@@ -4,9 +4,13 @@ from langchain_openai import ChatOpenAI
 from langchain_core.messages import SystemMessage, HumanMessage
 from core.config import get_settings
 
-def get_llm():
+def get_llm(temperature: float = 0.7):
     settings = get_settings()
-    return ChatOpenAI(model="gpt-4o", api_key=settings.OPENAI_API_KEY)
+    return ChatOpenAI(
+        model="gpt-4o", 
+        api_key=settings.OPENAI_API_KEY,
+        temperature=temperature
+    )
 
 def get_search_service():
     settings = get_settings()
@@ -150,7 +154,7 @@ def content_generation_agent(state: GraphState) -> GraphState:
     tone = _get_tone_guidance(industry)
 
     for article in approved_articles:
-        llm = get_llm()
+        llm = get_llm(temperature=0.7)
 
         # --- Pass 1: Draft generation ---
         draft_messages = [
