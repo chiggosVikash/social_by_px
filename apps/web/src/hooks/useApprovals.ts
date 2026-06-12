@@ -2,12 +2,20 @@ import { useState, useEffect } from "react";
 import { toast } from "sonner";
 import { apiClient } from "@/lib/api-client";
 
+export interface SlideOut {
+  id: number;
+  text_content: string;
+  image_url: string | null;
+  caption: string | null;
+  emoji: string | null;
+}
+
 export interface ApprovalItem {
   id: number;
   project_id: number;
   project_name: string;
   article_title: string;
-  slides: string[];
+  slides: SlideOut[];
 }
 
 export function useApprovals() {
@@ -58,6 +66,29 @@ export function useApprovals() {
     } catch (error) {
       console.error("Regeneration failed:", error);
       toast.error("Failed to start regeneration.");
+      throw error;
+    }
+  };
+
+  const handleUpdateSlides = async (articleId: number, slides: {id: number, text_content: string}[]) => {
+    try {
+      await apiClient.put(`/approvals/${articleId}/slides`, { slides });
+      toast.success("Slides updated successfully!");
+    } catch (error) {
+      console.error("Failed to update slides:", error);
+      toast.error("Failed to save slide edits.");
+      throw error;
+    }
+  };
+
+  const handleGenerateImages = async (articleId: number) => {
+    try {
+      await apiClient.post(`/approvals/${articleId}/generate-images`);
+      toast.success("Image generation started!");
+    } catch (error) {
+      console.error("Failed to start image generation:", error);
+      toast.error("Failed to start image generation.");
+      throw error;
     }
   };
 
@@ -66,6 +97,8 @@ export function useApprovals() {
     loading,
     handleApprove,
     handleReject,
-    handleRegenerate
+    handleRegenerate,
+    handleUpdateSlides,
+    handleGenerateImages
   };
 }

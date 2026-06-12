@@ -24,3 +24,9 @@ def enqueue_article_regeneration(article_id: int):
     from workers.tasks import run_article_regeneration_task
     job = workflow_queue.enqueue(run_article_regeneration_task, article_id)
     return job.id
+
+def enqueue_image_generation(article_id: int):
+    """Enqueues a background task to generate images for slides of an article."""
+    from workers.tasks import run_image_generation_task
+    job = workflow_queue.enqueue(run_image_generation_task, article_id, job_timeout=700)
+    return job.id

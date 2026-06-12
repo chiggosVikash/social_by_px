@@ -1,159 +1,190 @@
 import asyncio
 import logging
 import json
-import redis.asyncio as redis
+import uuid
+from typing import Optional, AsyncGenerator, Tuple, Any, cast
+from contextlib import asynccontextmanager
 
+import redis.asyncio as redis
+from sqlalchemy import select
+from sqlalchemy.orm import selectinload
+
+from core.config import get_settings
 from db import session as db_session
+from models.core import Article, Project, Slide, WorkflowRun
 from repositories.project import project_repo
 from repositories.article import article_repo
 from agents.graph import app_graph
 from agents.state import GraphState
-from core.config import get_settings
+from agents.nodes import content_generation_agent, slide_verification_agent
+from services.storage import upload_file
+from services.image import ImageGenerationService, ImageOptimizationService
 
 logger = logging.getLogger(__name__)
 
+# -----------------------------------------------------------------------------
+# Core Utilities & Services
+# -----------------------------------------------------------------------------
+
+PROGRESS_RULES = {
+    "Not started": 0,
+    "Completed": 100
+}
+
 def get_progress_value(status: str) -> int:
-    if status == "Not started": return 0
-    if "Starting" in status: return 5
-    if "research" in status: return 20
-    if "verify" in status and "verify_slides" not in status: return 40
-    if "refine" in status: return 45
-    if "generate" in status: return 60
-    if "verify_slides" in status: return 80
-    if "publish" in status: return 95
-    if status == "Completed": return 100
+    if status in PROGRESS_RULES:
+        return PROGRESS_RULES[status]
+    
+    status_lower = status.lower()
+    if "starting" in status_lower: return 5
+    if "verify_slides" in status_lower: return 80
+    if "verify" in status_lower: return 40
+    if "research" in status_lower: return 20
+    if "refine" in status_lower: return 45
+    if "generate" in status_lower: return 60
+    if "publish" in status_lower: return 95
     return 10
+
+
+class ProgressNotifier:
+    """Encapsulates Redis publishing logic for progress updates."""
+    def __init__(self, redis_client: redis.Redis, project_id: int):
+        self.redis_client = redis_client
+        self.project_id = project_id
+        self.topic = f"workflow:progress:{project_id}"
+
+    async def publish(self, status: str, is_failed: bool = False) -> None:
+        progress = get_progress_value(status)
+        payload = {
+            "status": status,
+            "progress": progress,
+            "is_failed": is_failed
+        }
+        await self.redis_client.publish(self.topic, json.dumps(payload))
+
+
+@asynccontextmanager
+async def worker_context(project_id: Optional[int] = None) -> AsyncGenerator[Tuple[Any, redis.Redis, Optional[ProgressNotifier]], None]:
+    """
+    Context manager that sets up the database session and Redis client for worker tasks.
+    It guarantees teardown and yields a ProgressNotifier if project_id is provided.
+    """
+    settings = get_settings()
+    redis_client = redis.from_url(settings.REDIS_URL)
+    maker = db_session.async_session_maker or db_session.init_db()
+    
+    notifier = ProgressNotifier(redis_client, project_id) if project_id else None
+
+    try:
+        async with maker() as db:
+            yield db, redis_client, notifier
+    finally:
+        await redis_client.aclose()
+
+
+# -----------------------------------------------------------------------------
+# Worker Tasks
+# -----------------------------------------------------------------------------
 
 def run_workflow_task(run_id: int):
     """
     Runs the LangGraph workflow for a given project synchronously (for RQ workers).
-    Uses asyncio.run() since the RQ worker is synchronous by default but LangGraph/DB calls can be async.
     """
     asyncio.run(_run_workflow_async(run_id))
 
-async def publish_progress(redis_client, project_id: int, status: str, is_failed: bool = False):
-    progress = get_progress_value(status)
-    payload = {
-        "status": status,
-        "progress": progress,
-        "is_failed": is_failed
-    }
-    await redis_client.publish(f"workflow:progress:{project_id}", json.dumps(payload))
-
 async def _run_workflow_async(run_id: int):
-    settings = get_settings()
-    redis_client = redis.from_url(settings.REDIS_URL)
-    
-    maker = db_session.async_session_maker or db_session.init_db()
-    async with maker() as db:
-        from models.core import WorkflowRun
-        from sqlalchemy import select
-        from sqlalchemy.orm import selectinload
-        
-        # Fetch the workflow run
-        result = await db.execute(select(WorkflowRun).options(selectinload(WorkflowRun.project)).where(WorkflowRun.id == run_id))
+    # Setup initially without project_id, fetch it, then we could use notifier.
+    # We'll just instantiate ProgressNotifier manually once we have project_id inside the DB context.
+    async with worker_context() as (db, redis_client, _):
+        result = await db.execute(
+            select(WorkflowRun)
+            .options(selectinload(WorkflowRun.project))
+            .where(WorkflowRun.id == run_id)
+        )
         workflow_run = result.scalar_one_or_none()
         
-        if not workflow_run:
-            logger.error(f"WorkflowRun {run_id} not found.")
-            await redis_client.aclose()
+        if not workflow_run or not workflow_run.project_id:
+            logger.error(f"WorkflowRun {run_id} not found or missing project_id.")
             return
 
-        project_id: int = workflow_run.project_id # type: ignore
-        owner_id: int = workflow_run.project.owner_id # type: ignore
+        project_id = cast(int, workflow_run.project_id)
+        owner_id = cast(int, workflow_run.project.owner_id) if workflow_run.project else 0
+        notifier = ProgressNotifier(redis_client, project_id)
 
-        # Fetch project with keywords
-        project = await project_repo.get_with_keywords(db, id=project_id, owner_id=owner_id)
-        if not project:
-            logger.warning(f"Project {project_id} not found.")
-            workflow_run.status = "Failed" # type: ignore
-            workflow_run.error_message = f"Project {project_id} not found." # type: ignore
-            await db.commit()
-            await publish_progress(redis_client, project_id, "Failed", is_failed=True)
-            await redis_client.aclose()
-            return
-
-        keywords = [kw.keyword for kw in project.keywords]
-        
-        # Initialize state
-        initial_state: GraphState = {
-            "project_id": project_id, # type: ignore
-            "keywords": keywords,
-            "industry": str(project.industry or ""),
-            "search_queries": [],
-            "current_articles": [],
-            "retries": 0,
-            "approved_articles": [],
-            "generated_slides": {},
-            "approved_slides": {},
-            "publish_status": ""
-        }
-        
         try:
-            workflow_run.status = "Starting workflow..." # type: ignore
-            await db.commit()
-            await publish_progress(redis_client, project_id, "Starting workflow...")
+            # Fetch project with keywords
+            project = await project_repo.get_with_keywords(db, id=project_id, owner_id=owner_id)
+            if not project:
+                workflow_run.status = "Failed"
+                workflow_run.error_message = f"Project {project_id} not found."
+                await db.commit()
+                await notifier.publish("Failed", is_failed=True)
+                return
+
+            keywords = [kw.keyword for kw in project.keywords]
             
-            # Use astream to track progress, then get final accumulated state
+            initial_state: GraphState = {
+                "project_id": project_id,
+                "keywords": keywords,
+                "industry": str(project.industry or ""),
+                "search_queries": [],
+                "current_articles": [],
+                "retries": 0,
+                "approved_articles": [],
+                "generated_slides": {},
+                "approved_slides": {},
+                "publish_status": ""
+            }
+            
+            workflow_run.status = "Starting workflow..."
+            await db.commit()
+            await notifier.publish("Starting workflow...")
+            
             final_state = None
             async for event in app_graph.astream(initial_state, stream_mode="values"):
-                # In "values" mode, each event is the full accumulated state after a node runs
                 final_state = event
-                # Infer which node just ran from the status changes
+                
+                # Deduce progress from state presence
                 status_parts = []
-                if event.get("current_articles"):
-                    status_parts.append("research")
-                if event.get("approved_articles"):
-                    status_parts.append("verify")
-                if event.get("generated_slides"):
-                    status_parts.append("generate")
-                if event.get("approved_slides"):
-                    status_parts.append("verify_slides")
-                if event.get("publish_status"):
-                    status_parts.append("publish")
+                if event.get("current_articles"): status_parts.append("research")
+                if event.get("approved_articles"): status_parts.append("verify")
+                if event.get("generated_slides"): status_parts.append("generate")
+                if event.get("approved_slides"): status_parts.append("verify_slides")
+                if event.get("publish_status"): status_parts.append("publish")
                 
                 latest_node = status_parts[-1] if status_parts else "starting"
                 status_msg = f"Agent '{latest_node}' is working..."
-                workflow_run.status = status_msg # type: ignore
+                
+                workflow_run.status = status_msg
                 await db.commit()
-                await publish_progress(redis_client, project_id, status_msg)
+                await notifier.publish(status_msg)
 
             if not final_state:
                 raise RuntimeError("Workflow produced no output")
 
-            logger.info(f"Workflow completed for project {project_id}. approved_articles={len(final_state.get('approved_articles', []))}, approved_slides={len(final_state.get('approved_slides', {}))}")
+            logger.info(f"Workflow completed for project {project_id}.")
             
-            # Save results to DB using the extracted repository logic
-            await article_repo.save_workflow_results(db, project_id, final_state) # type: ignore
+            await article_repo.save_workflow_results(db, project_id, final_state)
             logger.info(f"Persisted articles and slides to database for project {project_id}.")
             
-            workflow_run.status = "Completed" # type: ignore
+            workflow_run.status = "Completed"
             await db.commit()
-            await publish_progress(redis_client, project_id, "Completed")
+            await notifier.publish("Completed")
             
         except Exception as e:
             logger.exception(f"Workflow {run_id} failed with error: {e}")
-            workflow_run.status = "Failed" # type: ignore
-            workflow_run.error_message = str(e) # type: ignore
-            await db.commit()
-            await publish_progress(redis_client, project_id, "Failed", is_failed=True)
-        finally:
-            await redis_client.aclose()
+            if workflow_run:
+                workflow_run.status = "Failed"
+                workflow_run.error_message = str(e)
+                await db.commit()
+            await notifier.publish("Failed", is_failed=True)
 
 
 def run_article_regeneration_task(article_id: int):
     asyncio.run(_run_article_regeneration_async(article_id))
 
 async def _run_article_regeneration_async(article_id: int):
-    settings = get_settings()
-    redis_client = redis.from_url(settings.REDIS_URL)
-    
-    maker = db_session.async_session_maker or db_session.init_db()
-    async with maker() as db:
-        from models.core import Article, Slide, Project
-        from sqlalchemy import select
-        from sqlalchemy.orm import selectinload
-        
+    async with worker_context() as (db, redis_client, _):
         result = await db.execute(
             select(Article)
             .options(
@@ -164,20 +195,19 @@ async def _run_article_regeneration_async(article_id: int):
         )
         article = result.scalar_one_or_none()
         
-        if not article:
-            logger.error(f"Article {article_id} not found.")
-            await redis_client.aclose()
+        if not article or not article.project_id:
+            logger.error(f"Article {article_id} not found or missing project_id.")
             return
 
-        project_id: int = article.project_id # type: ignore
+        project_id = cast(int, article.project_id)
         project = article.project
+        notifier = ProgressNotifier(redis_client, project_id)
         
         try:
-            await publish_progress(redis_client, project_id, "Regenerating article...")
+            await notifier.publish("Regenerating article...")
             
-            # Setup a mini GraphState
             state: GraphState = {
-                "project_id": project_id, # type: ignore
+                "project_id": project_id,
                 "keywords": [k.keyword for k in project.keywords] if hasattr(project, "keywords") else [],
                 "industry": str(project.industry or ""),
                 "search_queries": [],
@@ -195,17 +225,13 @@ async def _run_article_regeneration_async(article_id: int):
                 "publish_status": ""
             }
             
-            await publish_progress(redis_client, project_id, "Agent 'generate' is working...")
-            from agents.nodes import content_generation_agent, slide_verification_agent
-            
-            # Run generation directly
+            await notifier.publish("Agent 'generate' is working...")
             state = content_generation_agent(state)
             
-            await publish_progress(redis_client, project_id, "Agent 'verify_slides' is working...")
+            await notifier.publish("Agent 'verify_slides' is working...")
             state = slide_verification_agent(state)
             
-            # Check if we got approved slides
-            approved_slides = state.get("approved_slides", {}).get(article.url, [])
+            approved_slides = state.get("approved_slides", {}).get(str(article.url), [])
             if not approved_slides:
                 raise RuntimeError("Slide generation failed validation.")
             
@@ -225,15 +251,77 @@ async def _run_article_regeneration_async(article_id: int):
                 )
                 db.add(slide)
             
-            article.status = "pending" # Back to pending approval
+            article.status = "pending"
             await db.commit()
-            
-            await publish_progress(redis_client, project_id, "Completed")
+            await notifier.publish("Completed")
             
         except Exception as e:
             logger.exception(f"Regeneration for article {article_id} failed: {e}")
-            article.status = "pending" # revert
+            if article:
+                article.status = "pending"
+                await db.commit()
+            await notifier.publish("Failed", is_failed=True)
+
+
+def run_image_generation_task(article_id: int):
+    """Generates images using DALL-E 3 for the slides of a specific article."""
+    asyncio.run(_run_image_generation_async(article_id))
+
+async def _run_image_generation_async(article_id: int):
+    async with worker_context() as (db, redis_client, _):
+        result = await db.execute(
+            select(Article)
+            .options(selectinload(Article.project), selectinload(Article.slides))
+            .where(Article.id == article_id)
+        )
+        article = result.scalar_one_or_none()
+        
+        if not article or not article.project_id:
+            logger.error(f"Article {article_id} not found or missing project_id.")
+            return
+
+        project_id = cast(int, article.project_id)
+        notifier = ProgressNotifier(redis_client, project_id)
+        
+        try:
+            logger.info(f"Starting image generation for article {article_id} with {len(article.slides)} slides.")
+            await notifier.publish("Generating slide background images...")
+            
+            slides_to_process = sorted(list(article.slides), key=lambda s: s.order_index)
+            
+            for idx, slide in enumerate(slides_to_process):
+                logger.info(f"Processing slide {idx+1}/{len(slides_to_process)} (ID: {slide.id})")
+                await notifier.publish(f"Generating image for slide {idx+1}/{len(slides_to_process)}...")
+                
+                prompt_source = slide.caption or slide.text_content or article.title
+                image_prompt = f"Abstract background for a social media slide. Minimalist, modern, beautiful, subtle. Theme: {prompt_source[:500]}"
+                image_prompt = image_prompt[:950]
+                
+                raw_image_bytes = await ImageGenerationService.generate_image(image_prompt)
+                
+                if raw_image_bytes:
+                    logger.info("Successfully generated image. Optimizing...")
+                    optimized_bytes = ImageOptimizationService.optimize_for_web(raw_image_bytes, quality=80)
+
+                    file_name = f"slides/article_{article.id}_slide_{idx}_{uuid.uuid4().hex[:8]}.webp"
+                    logger.info(f"Uploading optimized image to R2 as {file_name}")
+                    permanent_url = await upload_file(optimized_bytes, file_name, content_type="image/webp")
+                    
+                    slide.image_url = permanent_url
+                    logger.info(f"Committing db transaction for slide {slide.id} with url {slide.image_url}")
+                    await db.commit()
+                else:
+                    logger.warning(f"No response data from OpenAI for slide {slide.id}")
+            
+            logger.info(f"Finished processing all slides for article {article_id}")
+            article.status = "pending"
             await db.commit()
-            await publish_progress(redis_client, project_id, "Failed", is_failed=True)
-        finally:
-            await redis_client.aclose()
+            
+            await notifier.publish("Completed")
+        except Exception as e:
+            logger.error(f"Image generation task failed for article {article_id}: {str(e)}", exc_info=True)
+            if article:
+                article.status = "failed"
+                await db.commit()
+            await notifier.publish(f"Failed: {str(e)}", is_failed=True)
+            raise e

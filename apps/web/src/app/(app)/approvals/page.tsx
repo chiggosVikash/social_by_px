@@ -1,4 +1,4 @@
-import { ApprovalList, ApprovalItem } from "@/components/ApprovalList";
+import { ApprovalList } from "@/components/ApprovalList";
 
 export default function ApprovalsPage() {
 
