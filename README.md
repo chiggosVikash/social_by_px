@@ -84,7 +84,7 @@ uv run alembic upgrade head
 Start the development server:
 
 ```bash
-uv run uvicorn src.main:app --reload --port 8000
+uv run uvicorn main:app --app-dir src --reload --port 8000
 ```
 
 Start the RQ worker (in a separate terminal) for background jobs:
