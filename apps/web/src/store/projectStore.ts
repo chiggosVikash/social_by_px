@@ -16,12 +16,13 @@ export interface ProjectState {
 
 export interface ProjectActions {
   fetchProjects: () => Promise<void>;
+  createProject: (data: { name: string; industry: string; keywords: string[] }) => Promise<void>;
 }
 
 export type ProjectStore = ProjectState & ProjectActions;
 
 export const useProjectStore = create<ProjectStore>()(
-  subscribeWithSelector((set) => ({
+  subscribeWithSelector((set, get) => ({
     projects: [],
     isLoading: false,
     error: null,
@@ -32,6 +33,18 @@ export const useProjectStore = create<ProjectStore>()(
         set({ projects: response.data, isLoading: false });
       } catch {
         set({ error: 'Failed to fetch projects', isLoading: false });
+      }
+    },
+    createProject: async (data) => {
+      set({ isLoading: true, error: null });
+      try {
+        const response = await apiClient.post<Project>('/projects', data);
+        // Refresh the list immediately
+        await get().fetchProjects();
+      } catch (err: any) {
+        console.error("Failed to create project", err);
+        set({ error: 'Failed to create project', isLoading: false });
+        throw err;
       }
     },
   }))

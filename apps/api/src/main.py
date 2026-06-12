@@ -20,8 +20,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(projects.router)
-app.include_router(social_accounts.router)
+from fastapi import APIRouter
+
+api_router = APIRouter(prefix="/api/v1")
+api_router.include_router(projects.router)
+api_router.include_router(social_accounts.router)
+
+app.include_router(api_router)
 
 @app.get("/health")
 async def health_check():

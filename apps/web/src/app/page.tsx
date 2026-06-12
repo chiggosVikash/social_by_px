@@ -16,6 +16,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { CreateProjectDialog } from "@/components/CreateProjectDialog";
 
 export default function DashboardPage() {
   const projects = useProjectStore((state) => state.projects);
@@ -36,9 +37,11 @@ export default function DashboardPage() {
           </h1>
           <p className="text-muted-foreground font-medium">Manage your automated content workflows.</p>
         </div>
-        <Button size="lg" className="shrink-0 rounded-xl font-medium shadow-md hover:shadow-lg transition-all duration-200">
-          <Plus className="mr-2 h-5 w-5" /> New Project
-        </Button>
+        <CreateProjectDialog>
+          <Button size="lg" className="shrink-0 rounded-xl font-medium shadow-md hover:shadow-lg transition-all duration-200">
+            <Plus className="mr-2 h-5 w-5" /> New Project
+          </Button>
+        </CreateProjectDialog>
       </div>
 
       {isLoading ? (
@@ -136,9 +139,11 @@ export default function DashboardPage() {
               <p className="text-muted-foreground mb-8 max-w-md font-medium">
                 Create your first project to start generating automated social content workflows.
               </p>
-              <Button size="lg" className="rounded-xl shadow-md hover:shadow-lg transition-all hover:-translate-y-0.5">
-                <Plus className="mr-2 h-5 w-5" /> Create First Project
-              </Button>
+              <CreateProjectDialog>
+                <Button size="lg" className="rounded-xl shadow-md hover:shadow-lg transition-all hover:-translate-y-0.5">
+                  <Plus className="mr-2 h-5 w-5" /> Create First Project
+                </Button>
+              </CreateProjectDialog>
             </div>
           )}
         </div>
