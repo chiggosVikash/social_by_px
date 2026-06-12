@@ -1,0 +1,112 @@
+import pytest
+from unittest.mock import patch, MagicMock
+from agents.state import GraphState
+from agents.nodes import (
+    research_agent,
+    verification_agent,
+    query_refinement_agent,
+    content_generation_agent,
+    slide_verification_agent,
+    publishing_agent
+)
+from agents.graph import should_refine, is_content_valid
+
+@pytest.fixture
+def initial_state() -> GraphState:
+    return {
+        "project_id": 1,
+        "keywords": ["AI", "Tech"],
+        "industry": "Technology",
+        "search_queries": [],
+        "current_articles": [],
+        "retries": 0,
+        "approved_articles": [],
+        "generated_slides": {},
+        "approved_slides": {},
+        "publish_status": ""
+    }
+
+def test_research_agent(initial_state):
+    with patch("agents.nodes.get_search_service") as mock_get_service:
+        mock_service = MagicMock()
+        mock_service.search.return_value = [
+            {"title": "Test AI", "url": "http://test.com", "source": "Test", "published_date": "2026", "summary": "Test"}
+        ]
+        mock_get_service.return_value = mock_service
+        
+        new_state = research_agent(initial_state)
+        # We have 2 keywords ("AI", "Tech"), so it extends twice
+        assert len(new_state["current_articles"]) == 2
+        assert new_state["current_articles"][0]["title"] == "Test AI"
+
+def test_verification_agent(initial_state):
+    initial_state["current_articles"] = [
+        {"title": "Article 1", "url": "http://test1.com", "source": "Test", "published_date": "2026", "summary": "Test"},
+        {"title": "Article 2", "url": "http://test2.com", "source": "Test", "published_date": "2026", "summary": "Test"},
+        {"title": "Article 3", "url": "http://test3.com", "source": "Test", "published_date": "2026", "summary": "Test"}
+    ]
+    new_state = verification_agent(initial_state)
+    # The logic mocks approving the first 2
+    assert len(new_state["approved_articles"]) == 2
+
+def test_query_refinement_agent(initial_state):
+    initial_state["retries"] = 1
+    new_state = query_refinement_agent(initial_state)
+    assert new_state["retries"] == 2
+    assert "AI latest news" in new_state["search_queries"]
+
+def test_content_generation_agent(initial_state):
+    initial_state["approved_articles"] = [
+         {"title": "Article 1", "url": "http://test1.com", "source": "Test", "published_date": "2026", "summary": "Test"}
+    ]
+    with patch("agents.nodes.get_llm") as mock_get_llm:
+        mock_llm = MagicMock()
+        mock_response = MagicMock()
+        mock_response.content = '[{"text_content": "Slide 1 text", "image_prompt": "Image 1"}]'
+        mock_llm.invoke.return_value = mock_response
+        mock_get_llm.return_value = mock_llm
+        
+        new_state = content_generation_agent(initial_state)
+        assert "http://test1.com" in new_state["generated_slides"]
+        assert len(new_state["generated_slides"]["http://test1.com"]) == 1
+        assert new_state["generated_slides"]["http://test1.com"][0]["text_content"] == "Slide 1 text"
+
+def test_slide_verification_agent(initial_state):
+    initial_state["generated_slides"] = {
+        "http://test1.com": [
+            {"text_content": "Valid short text", "image_prompt": "Img"},
+            {"text_content": "x" * 300, "image_prompt": "Too long text"}
+        ]
+    }
+    new_state = slide_verification_agent(initial_state)
+    assert len(new_state["approved_slides"]["http://test1.com"]) == 1
+    assert new_state["approved_slides"]["http://test1.com"][0]["text_content"] == "Valid short text"
+
+def test_publishing_agent(initial_state):
+    new_state = publishing_agent(initial_state)
+    assert new_state["publish_status"] == "Success"
+
+def test_conditional_edges(initial_state):
+    state1 = initial_state.copy()
+    state1["approved_articles"] = []
+    state1["retries"] = 1
+    assert should_refine(state1) == "refine"
+    
+    state2 = initial_state.copy()
+    # Adding mock keys to pass type checking for ArticleData if it's strict
+    state2["approved_articles"] = [{"title": "Art", "url": "", "source": "", "published_date": "", "summary": ""}]
+    state2["retries"] = 1
+    assert should_refine(state2) == "generate"
+    
+    state3 = initial_state.copy()
+    state3["approved_articles"] = []
+    state3["retries"] = 3
+    assert should_refine(state3) == "end"
+    
+    state4 = initial_state.copy()
+    state4["approved_slides"] = {"http://": []}
+    assert is_content_valid(state4) == "publish"
+    
+    state5 = initial_state.copy()
+    state5["approved_slides"] = {}
+    assert is_content_valid(state5) == "regenerate"

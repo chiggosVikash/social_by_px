@@ -36,5 +36,14 @@ class ArticleRepository:
                     db.add(slide)
         
         await db.commit()
+        
+    async def get_articles_for_project(self, db: AsyncSession, project_id: int):
+        from sqlalchemy.orm import selectinload
+        result = await db.execute(
+            select(Article)
+            .where(Article.project_id == project_id)
+            .options(selectinload(Article.slides))
+        )
+        return result.scalars().all()
 
 article_repo = ArticleRepository()

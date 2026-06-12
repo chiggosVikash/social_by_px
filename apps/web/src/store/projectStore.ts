@@ -18,6 +18,7 @@ export interface ProjectActions {
   fetchProjects: () => Promise<void>;
   createProject: (data: { name: string; industry: string; keywords: string[] }) => Promise<void>;
   runWorkflow: (projectId: number) => Promise<void>;
+  fetchProjectStatus: (projectId: number) => Promise<string>;
 }
 
 export type ProjectStore = ProjectState & ProjectActions;
@@ -56,5 +57,14 @@ export const useProjectStore = create<ProjectStore>()(
         throw err;
       }
     },
+    fetchProjectStatus: async (projectId) => {
+      try {
+        const response = await apiClient.get<{status: string}>(`/projects/${projectId}/status`);
+        return response.data.status;
+      } catch (err) {
+        console.error("Failed to fetch status", err);
+        return "Unknown";
+      }
+    }
   }))
 );

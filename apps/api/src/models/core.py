@@ -5,8 +5,9 @@ from db.base import Base
 class User(Base):
     __tablename__ = "users"
     id = Column(Integer, primary_key=True, index=True)
+    firebase_uid = Column(String, unique=True, index=True, nullable=True) # Adding for Firebase Auth
     email = Column(String, unique=True, index=True, nullable=False)
-    hashed_password = Column(String, nullable=False)
+    hashed_password = Column(String, nullable=True) # Make nullable for users who sign up via Google
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=func.now())
     

@@ -41,11 +41,23 @@ async def _run_workflow_async(project_id: int):
             "publish_status": ""
         }
         
-        # We invoke the graph
-        # Note: If graph relies on async nodes, invoke handles it, or use ainvoke
-        final_state = await app_graph.ainvoke(initial_state)
+        from workers.queue import redis_conn
+        
+        # Publish initial status
+        redis_conn.set(f"workflow:project:{project_id}:status", "Starting workflow...")
+        
+        final_state = initial_state
+        async for event in app_graph.astream(initial_state, stream_mode="updates"):
+            # The event contains a mapping of node_name -> state_update
+            for node_name, state_update in event.items():
+                logger.info(f"Agent '{node_name}' finished processing for project {project_id}.")
+                redis_conn.set(f"workflow:project:{project_id}:status", f"Agent '{node_name}' is working...")
+                # Update final_state with the latest updates from this node
+                final_state = {**final_state, **state_update}
+
         logger.info(f"Workflow completed for project {project_id}. Final state keys: {final_state.keys()}")
+        redis_conn.set(f"workflow:project:{project_id}:status", "Completed")
         
         # Save results to DB using the extracted repository logic
-        await article_repo.save_workflow_results(db, project_id, final_state)
+        await article_repo.save_workflow_results(db, project_id, final_state) # type: ignore
         logger.info(f"Persisted articles and slides to database for project {project_id}.")
