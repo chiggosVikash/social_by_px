@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Plus, Settings, Play, LayoutGrid, ArrowRight, MoreVertical, Edit, Copy, Trash2, Eye } from "lucide-react";
+import { Plus, Settings, Play, LayoutGrid, ArrowRight, MoreVertical, Edit, Copy, Trash2, Eye, RotateCcw, XCircle } from "lucide-react";
 import Link from "next/link";
 import { useProjectStore, Project } from "@/store/projectStore";
 import { useAuth } from "@/contexts/AuthContext";
@@ -38,32 +38,47 @@ function getProgressValue(status: string): number {
 
 function ProjectCard({ project }: { project: Project }) {
   const [status, setStatus] = useState<string>("Not started");
-  const [isPolling, setIsPolling] = useState(false);
+  const [progressValue, setProgressValue] = useState<number>(0);
+  const [isFailed, setIsFailed] = useState<boolean>(false);
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const fetchProjectStatus = useProjectStore((state) => state.fetchProjectStatus);
   const runWorkflow = useProjectStore((state) => state.runWorkflow);
 
   useEffect(() => {
     // Initial fetch
-    fetchProjectStatus(project.id).then(s => setStatus(s));
+    fetchProjectStatus(project.id).then(s => {
+      setStatus(s);
+      setProgressValue(getProgressValue(s));
+      setIsFailed(s === "Failed" || s.toLowerCase().includes("fail"));
+    });
   }, [project.id, fetchProjectStatus]);
 
   useEffect(() => {
-    let interval: NodeJS.Timeout;
-    if (isPolling || status.includes("working") || status.includes("Starting")) {
-      interval = setInterval(async () => {
-        const s = await fetchProjectStatus(project.id);
-        setStatus(s);
-        if (s === "Completed") setIsPolling(false);
-      }, 2000);
-    }
-    return () => clearInterval(interval);
-  }, [project.id, isPolling, status, fetchProjectStatus]);
+    const wsUrl = `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/v1/ws/projects/${project.id}/progress`.replace("http", "ws");
+    const ws = new WebSocket(wsUrl);
+
+    ws.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        setStatus(data.status);
+        setProgressValue(data.progress);
+        setIsFailed(data.is_failed);
+      } catch (e) {
+        console.error("Failed to parse websocket message", e);
+      }
+    };
+
+    return () => {
+      ws.close();
+    };
+  }, [project.id]);
 
   const handleRunWorkflow = async () => {
     try {
       await runWorkflow(project.id);
-      setIsPolling(true);
       setStatus("Starting workflow...");
+      setProgressValue(5);
+      setIsFailed(false);
       toast.success("Workflow queued successfully!");
     } catch (err) {
       toast.error("Failed to queue workflow");
@@ -73,7 +88,6 @@ function ProjectCard({ project }: { project: Project }) {
   const isCompleted = status === "Completed";
   const isWorking = status.includes("working") || status.includes("Starting");
   const hasStarted = status !== "Not started";
-  const progressValue = getProgressValue(status);
 
   return (
     <Card className="group overflow-hidden border border-border/50 bg-card hover:bg-accent/5 transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:border-primary/30 relative flex flex-col h-full">
@@ -95,7 +109,7 @@ function ProjectCard({ project }: { project: Project }) {
                 {project.industry}
               </Badge>
               {hasStarted && (
-                <Badge variant={isCompleted ? "default" : "outline"} className={isWorking ? "animate-pulse truncate" : "truncate"}>
+                <Badge variant={isCompleted ? "default" : isFailed ? "destructive" : "outline"} className={isWorking ? "animate-pulse truncate" : "truncate"}>
                   {status}
                 </Badge>
               )}
@@ -112,6 +126,14 @@ function ProjectCard({ project }: { project: Project }) {
               <Settings className="mr-2 h-4 w-4" />
               Settings
             </DropdownMenuItem>
+            
+            <DropdownMenuItem onSelect={() => setIsPreviewOpen(true)} className="cursor-pointer">
+              <div className="flex items-center w-full">
+                <Eye className="mr-2 h-4 w-4" />
+                View Content
+              </div>
+            </DropdownMenuItem>
+
             <DropdownMenuItem>
               <Edit className="mr-2 h-4 w-4" />
               Edit Details
@@ -133,39 +155,43 @@ function ProjectCard({ project }: { project: Project }) {
         {hasStarted && (
           <div className="space-y-2 mb-4">
              <div className="flex justify-between text-xs text-muted-foreground">
-               <span>Progress</span>
-               <span>{progressValue}%</span>
+               <span className="flex items-center">
+                 {isFailed && <XCircle className="w-3 h-3 mr-1 text-destructive" />}
+                 Progress
+               </span>
+               <span className={isFailed ? "text-destructive font-medium" : ""}>{progressValue}%</span>
              </div>
-             <Progress value={progressValue} className="h-2" />
+             <Progress value={progressValue} className="h-2" indicatorClassName={isFailed ? "bg-destructive" : ""} />
           </div>
         )}
         
         <div className="pt-4 border-t border-border/40 space-y-2">
           {!isCompleted && (
             <Button
-              className="w-full justify-between rounded-lg font-medium bg-secondary text-secondary-foreground hover:bg-primary hover:text-primary-foreground group/btn transition-colors"
+              className={isFailed 
+                ? "w-full justify-center rounded-lg font-medium bg-destructive/10 text-destructive hover:bg-destructive/20 hover:text-destructive group/btn transition-colors"
+                : "w-full justify-between rounded-lg font-medium bg-secondary text-secondary-foreground hover:bg-primary hover:text-primary-foreground group/btn transition-colors"
+              }
               onClick={handleRunWorkflow}
               disabled={isWorking}
             >
-              <span className="flex items-center">
-                <Play className="mr-2 h-4 w-4" /> {isWorking ? "Workflow Running..." : "Run Workflow"}
-              </span>
-              {!isWorking && <ArrowRight className="h-4 w-4 opacity-50 group-hover/btn:opacity-100 group-hover/btn:translate-x-1 transition-all" />}
-            </Button>
-          )}
-
-          {hasStarted && (
-            <PreviewModal projectId={project.id}>
-              <Button className="w-full justify-between rounded-lg font-medium" variant={isCompleted ? "default" : "outline"}>
+              {isFailed ? (
                 <span className="flex items-center">
-                  <Eye className="mr-2 h-4 w-4" /> {isCompleted ? "View Final Results" : "Live Preview"}
+                  <RotateCcw className="mr-2 h-4 w-4" /> Replay Workflow
                 </span>
-                <ArrowRight className="h-4 w-4 opacity-50" />
-              </Button>
-            </PreviewModal>
+              ) : (
+                <>
+                  <span className="flex items-center">
+                    <Play className="mr-2 h-4 w-4" /> {isWorking ? "Workflow Running..." : "Run Workflow"}
+                  </span>
+                  {!isWorking && <ArrowRight className="h-4 w-4 opacity-50 group-hover/btn:opacity-100 group-hover/btn:translate-x-1 transition-all" />}
+                </>
+              )}
+            </Button>
           )}
         </div>
       </CardContent>
+      <PreviewModal projectId={project.id} open={isPreviewOpen} onOpenChange={setIsPreviewOpen} />
     </Card>
   );
 }

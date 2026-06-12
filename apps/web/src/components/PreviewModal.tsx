@@ -22,8 +22,15 @@ interface Article {
   slides: Slide[];
 }
 
-export function PreviewModal({ projectId, children }: { projectId: number, children: React.ReactNode }) {
-  const [open, setOpen] = useState(false);
+export function PreviewModal({ 
+  projectId, 
+  open, 
+  onOpenChange 
+}: { 
+  projectId: number;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
   const [articles, setArticles] = useState<Article[]>([]);
   const [loading, setLoading] = useState(true);
   
@@ -65,12 +72,7 @@ export function PreviewModal({ projectId, children }: { projectId: number, child
   };
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      {React.isValidElement(children) ? (
-        <DialogTrigger render={children as React.ReactElement} />
-      ) : (
-        <DialogTrigger>{children}</DialogTrigger>
-      )}
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-4xl h-[80vh] flex flex-col">
         <DialogHeader>
           <DialogTitle>Generated Content Preview</DialogTitle>
@@ -81,8 +83,10 @@ export function PreviewModal({ projectId, children }: { projectId: number, child
             <Loader2 className="w-8 h-8 animate-spin text-primary" />
           </div>
         ) : articles.length === 0 ? (
-          <div className="flex-1 flex items-center justify-center text-muted-foreground">
-            No articles or slides generated yet.
+          <div className="flex-1 flex flex-col items-center justify-center text-muted-foreground p-8 text-center border-2 border-dashed rounded-xl m-4 bg-muted/20">
+            <Loader2 className="w-8 h-8 animate-spin mb-4 opacity-20" />
+            <h3 className="text-lg font-medium text-foreground mb-1">No articles found</h3>
+            <p>The workflow is either still running or hasn't started yet.</p>
           </div>
         ) : (
           <div className="flex-1 flex flex-col min-h-0">

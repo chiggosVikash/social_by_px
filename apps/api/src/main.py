@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from core.config import get_settings
 from core.firebase import init_firebase
 
-from api import projects, social_accounts
+from api import projects, social_accounts, approvals
 
 settings = get_settings()
 init_firebase()  # [SOLID: DIP] — explicit initialization, not import side-effect
@@ -23,10 +23,13 @@ app.add_middleware(
 )
 
 from fastapi import APIRouter
+from api import projects, social_accounts, approvals, websockets
 
 api_router = APIRouter(prefix="/api/v1")
 api_router.include_router(projects.router)
 api_router.include_router(social_accounts.router)
+api_router.include_router(approvals.router)
+api_router.include_router(websockets.router, prefix="/ws")
 
 app.include_router(api_router)
 

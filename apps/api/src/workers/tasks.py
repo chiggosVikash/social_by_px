@@ -1,13 +1,28 @@
 import asyncio
 import logging
+import json
+import redis.asyncio as redis
 
 from db import session as db_session
 from repositories.project import project_repo
 from repositories.article import article_repo
 from agents.graph import app_graph
 from agents.state import GraphState
+from core.config import get_settings
 
 logger = logging.getLogger(__name__)
+
+def get_progress_value(status: str) -> int:
+    if status == "Not started": return 0
+    if "Starting" in status: return 5
+    if "research" in status: return 20
+    if "verify" in status and "verify_slides" not in status: return 40
+    if "refine" in status: return 45
+    if "generate" in status: return 60
+    if "verify_slides" in status: return 80
+    if "publish" in status: return 95
+    if status == "Completed": return 100
+    return 10
 
 def run_workflow_task(run_id: int):
     """
@@ -16,7 +31,19 @@ def run_workflow_task(run_id: int):
     """
     asyncio.run(_run_workflow_async(run_id))
 
+async def publish_progress(redis_client, project_id: int, status: str, is_failed: bool = False):
+    progress = get_progress_value(status)
+    payload = {
+        "status": status,
+        "progress": progress,
+        "is_failed": is_failed
+    }
+    await redis_client.publish(f"workflow:progress:{project_id}", json.dumps(payload))
+
 async def _run_workflow_async(run_id: int):
+    settings = get_settings()
+    redis_client = redis.from_url(settings.REDIS_URL)
+    
     maker = db_session.async_session_maker or db_session.init_db()
     async with maker() as db:
         from models.core import WorkflowRun
@@ -28,6 +55,7 @@ async def _run_workflow_async(run_id: int):
         
         if not workflow_run:
             logger.error(f"WorkflowRun {run_id} not found.")
+            await redis_client.aclose()
             return
 
         project_id: int = workflow_run.project_id # type: ignore
@@ -39,6 +67,8 @@ async def _run_workflow_async(run_id: int):
             workflow_run.status = "Failed" # type: ignore
             workflow_run.error_message = f"Project {project_id} not found." # type: ignore
             await db.commit()
+            await publish_progress(redis_client, project_id, "Failed", is_failed=True)
+            await redis_client.aclose()
             return
 
         keywords = [kw.keyword for kw in project.keywords]
@@ -60,14 +90,17 @@ async def _run_workflow_async(run_id: int):
         try:
             workflow_run.status = "Starting workflow..." # type: ignore
             await db.commit()
+            await publish_progress(redis_client, project_id, "Starting workflow...")
             
             final_state = initial_state
             async for event in app_graph.astream(initial_state, stream_mode="updates"):
                 # The event contains a mapping of node_name -> state_update
                 for node_name, state_update in event.items():
                     logger.info(f"Agent '{node_name}' finished processing for project {project_id}.")
-                    workflow_run.status = f"Agent '{node_name}' is working..." # type: ignore
+                    status_msg = f"Agent '{node_name}' is working..."
+                    workflow_run.status = status_msg # type: ignore
                     await db.commit()
+                    await publish_progress(redis_client, project_id, status_msg)
                     
                     # Update final_state with the latest updates from this node
                     final_state = {**final_state, **state_update}
@@ -80,9 +113,13 @@ async def _run_workflow_async(run_id: int):
             
             workflow_run.status = "Completed" # type: ignore
             await db.commit()
+            await publish_progress(redis_client, project_id, "Completed")
             
         except Exception as e:
             logger.exception(f"Workflow {run_id} failed with error: {e}")
             workflow_run.status = "Failed" # type: ignore
             workflow_run.error_message = str(e) # type: ignore
             await db.commit()
+            await publish_progress(redis_client, project_id, "Failed", is_failed=True)
+        finally:
+            await redis_client.aclose()

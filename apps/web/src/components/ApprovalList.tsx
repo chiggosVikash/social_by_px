@@ -2,36 +2,19 @@
 
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Check, X, RefreshCw } from "lucide-react";
-import { useState } from "react";
-import { toast } from "sonner";
+import { Check, X, RefreshCw, Loader2 } from "lucide-react";
+import { useApprovals } from "@/hooks/useApprovals";
 
-export interface ApprovalItem {
-  id: number;
-  project_name: string;
-  article_title: string;
-  slides: string[];
-}
+export function ApprovalList() {
+  const { items, loading, handleApprove, handleReject, handleRegenerate } = useApprovals();
 
-export function ApprovalList({ initialItems }: { initialItems: ApprovalItem[] }) {
-  const [items, setItems] = useState<ApprovalItem[]>(initialItems);
-
-  const handleApprove = async (id: number) => {
-    // In a real app, call a Server Action or API route here
-    setItems(items.filter(item => item.id !== id));
-    toast.success("Carousel approved for publishing!");
-  };
-
-  const handleReject = async (id: number) => {
-    // Call backend API to reject
-    setItems(items.filter(item => item.id !== id));
-    toast.error("Carousel rejected.");
-  };
-
-  const handleRegenerate = async (id: number) => {
-    // Call backend API to regenerate
-    toast.info("Regeneration queued.");
-  };
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center p-12">
+        <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
 
   if (items.length === 0) {
     return (

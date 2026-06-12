@@ -11,7 +11,9 @@ def init_db(settings=None):
     engine = create_async_engine(
         settings.ASYNC_DATABASE_URL,
         echo=False,
-        future=True
+        future=True,
+        pool_pre_ping=True,
+        pool_recycle=3600
     )
     async_session_maker = async_sessionmaker(
         bind=engine,

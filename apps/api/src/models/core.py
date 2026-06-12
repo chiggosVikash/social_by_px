@@ -1,84 +1,86 @@
-from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, DateTime, Float, JSON, Text, func
-from sqlalchemy.orm import relationship
+from sqlalchemy import Integer, String, Boolean, ForeignKey, DateTime, Float, JSON, Text, func
+from sqlalchemy.orm import relationship, Mapped, mapped_column
+from typing import List, Optional
+from datetime import datetime
 from db.base import Base
 
 class User(Base):
     __tablename__ = "users"
-    id = Column(Integer, primary_key=True, index=True)
-    firebase_uid = Column(String, unique=True, index=True, nullable=True) # Adding for Firebase Auth
-    email = Column(String, unique=True, index=True, nullable=False)
-    hashed_password = Column(String, nullable=True) # Make nullable for users who sign up via Google
-    is_active = Column(Boolean, default=True)
-    created_at = Column(DateTime, default=func.now())
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    firebase_uid: Mapped[Optional[str]] = mapped_column(String, unique=True, index=True, nullable=True) # Adding for Firebase Auth
+    email: Mapped[str] = mapped_column(String, unique=True, index=True, nullable=False)
+    hashed_password: Mapped[Optional[str]] = mapped_column(String, nullable=True) # Make nullable for users who sign up via Google
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[Optional[datetime]] = mapped_column(DateTime, default=func.now())
     
-    projects = relationship("Project", back_populates="owner")
-    social_accounts = relationship("SocialAccount", back_populates="owner")
+    projects: Mapped[List["Project"]] = relationship("Project", back_populates="owner")
+    social_accounts: Mapped[List["SocialAccount"]] = relationship("SocialAccount", back_populates="owner")
 
 class Project(Base):
     __tablename__ = "projects"
-    id = Column(Integer, primary_key=True, index=True)
-    name = Column(String, nullable=False)
-    industry = Column(String)
-    owner_id = Column(Integer, ForeignKey("users.id"))
-    created_at = Column(DateTime, default=func.now())
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    industry: Mapped[Optional[str]] = mapped_column(String)
+    owner_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("users.id"))
+    created_at: Mapped[Optional[datetime]] = mapped_column(DateTime, default=func.now())
     
-    owner = relationship("User", back_populates="projects")
-    keywords = relationship("ProjectKeyword", back_populates="project")
-    articles = relationship("Article", back_populates="project")
-    workflow_runs = relationship("WorkflowRun", back_populates="project", cascade="all, delete-orphan")
+    owner: Mapped["User"] = relationship("User", back_populates="projects")
+    keywords: Mapped[List["ProjectKeyword"]] = relationship("ProjectKeyword", back_populates="project")
+    articles: Mapped[List["Article"]] = relationship("Article", back_populates="project")
+    workflow_runs: Mapped[List["WorkflowRun"]] = relationship("WorkflowRun", back_populates="project", cascade="all, delete-orphan")
 
 class WorkflowRun(Base):
     __tablename__ = "workflow_runs"
-    id = Column(Integer, primary_key=True, index=True)
-    project_id = Column(Integer, ForeignKey("projects.id"))
-    status = Column(String, nullable=False)
-    started_at = Column(DateTime, default=func.now())
-    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
-    error_message = Column(Text, nullable=True)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    project_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("projects.id"))
+    status: Mapped[str] = mapped_column(String, nullable=False)
+    started_at: Mapped[Optional[datetime]] = mapped_column(DateTime, default=func.now())
+    updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime, default=func.now(), onupdate=func.now())
+    error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     
-    project = relationship("Project", back_populates="workflow_runs")
+    project: Mapped["Project"] = relationship("Project", back_populates="workflow_runs")
 
 class ProjectKeyword(Base):
     __tablename__ = "project_keywords"
-    id = Column(Integer, primary_key=True, index=True)
-    project_id = Column(Integer, ForeignKey("projects.id"))
-    keyword = Column(String, nullable=False)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    project_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("projects.id"))
+    keyword: Mapped[str] = mapped_column(String, nullable=False)
     
-    project = relationship("Project", back_populates="keywords")
+    project: Mapped["Project"] = relationship("Project", back_populates="keywords")
 
 class SocialAccount(Base):
     __tablename__ = "social_accounts"
-    id = Column(Integer, primary_key=True, index=True)
-    owner_id = Column(Integer, ForeignKey("users.id"))
-    platform = Column(String, nullable=False) # e.g., 'facebook', 'instagram'
-    account_id = Column(String, nullable=False)
-    access_token = Column(String, nullable=False)
-    created_at = Column(DateTime, default=func.now())
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    owner_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("users.id"))
+    platform: Mapped[str] = mapped_column(String, nullable=False) # e.g., 'facebook', 'instagram'
+    account_id: Mapped[str] = mapped_column(String, nullable=False)
+    access_token: Mapped[str] = mapped_column(String, nullable=False)
+    created_at: Mapped[Optional[datetime]] = mapped_column(DateTime, default=func.now())
     
-    owner = relationship("User", back_populates="social_accounts")
+    owner: Mapped["User"] = relationship("User", back_populates="social_accounts")
 
 class Article(Base):
     __tablename__ = "articles"
-    id = Column(Integer, primary_key=True, index=True)
-    project_id = Column(Integer, ForeignKey("projects.id"))
-    title = Column(String, nullable=False)
-    url = Column(String, unique=True, nullable=False)
-    source = Column(String)
-    published_date = Column(DateTime)
-    summary = Column(Text)
-    status = Column(String, default="pending") # pending, approved, rejected, published
-    relevance_score = Column(Float)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    project_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("projects.id"))
+    title: Mapped[str] = mapped_column(String, nullable=False)
+    url: Mapped[str] = mapped_column(String, unique=True, nullable=False)
+    source: Mapped[Optional[str]] = mapped_column(String)
+    published_date: Mapped[Optional[datetime]] = mapped_column(DateTime)
+    summary: Mapped[Optional[str]] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(String, default="pending") # pending, approved, rejected, published
+    relevance_score: Mapped[Optional[float]] = mapped_column(Float)
     
-    project = relationship("Project", back_populates="articles")
-    slides = relationship("Slide", back_populates="article")
+    project: Mapped["Project"] = relationship("Project", back_populates="articles")
+    slides: Mapped[List["Slide"]] = relationship("Slide", back_populates="article")
 
 class Slide(Base):
     __tablename__ = "slides"
-    id = Column(Integer, primary_key=True, index=True)
-    article_id = Column(Integer, ForeignKey("articles.id"))
-    order_index = Column(Integer, nullable=False)
-    image_url = Column(String, nullable=True)
-    text_content = Column(Text, nullable=True)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    article_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("articles.id"))
+    order_index: Mapped[int] = mapped_column(Integer, nullable=False)
+    image_url: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    text_content: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     
-    article = relationship("Article", back_populates="slides")
+    article: Mapped["Article"] = relationship("Article", back_populates="slides")
 
