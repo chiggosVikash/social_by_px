@@ -4,7 +4,7 @@ from typing import List
 
 from db.session import get_db
 from schemas.social_account import SocialAccountCreate, SocialAccountUpdate, SocialAccountResponse
-from api.projects import get_current_user_id # reusing the mock
+from api.deps import get_current_user_id  # [DRY] — shared auth dependency
 from repositories.social_account import social_account_repo
 
 router = APIRouter(prefix="/social-accounts", tags=["social-accounts"])

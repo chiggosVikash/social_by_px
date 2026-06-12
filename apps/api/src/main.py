@@ -1,10 +1,12 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from core.config import get_settings
+from core.firebase import init_firebase
 
 from api import projects, social_accounts
 
 settings = get_settings()
+init_firebase()  # [SOLID: DIP] — explicit initialization, not import side-effect
 
 app = FastAPI(
     title=settings.PROJECT_NAME,

@@ -5,49 +5,10 @@ from typing import List
 from db.session import get_db
 from schemas.project import ProjectCreate, ProjectUpdate, ProjectResponse
 from repositories.project import project_repo
+# [DRY] — Auth dependency imported from shared module
+from api.deps import get_current_user_id
 
 router = APIRouter(prefix="/projects", tags=["projects"])
-
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from core.security import verify_firebase_token
-
-security = HTTPBearer()
-
-async def get_current_user_id(
-    db: AsyncSession = Depends(get_db), 
-    credentials: HTTPAuthorizationCredentials = Depends(security)
-) -> int:
-    from models.core import User
-    from sqlalchemy.future import select
-    
-    token = credentials.credentials
-    try:
-        decoded_token = verify_firebase_token(token)
-        firebase_uid = decoded_token.get('uid')
-        email = decoded_token.get('email')
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=f"Invalid authentication credentials: {str(e)}",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-
-    # Check if user exists in DB
-    result = await db.execute(select(User).where(User.firebase_uid == firebase_uid))
-    user = result.scalar_one_or_none()
-    
-    if not user:
-        # Create user if it doesn't exist
-        user = User(
-            firebase_uid=firebase_uid,
-            email=email or f"{firebase_uid}@example.com",
-            hashed_password=None # Managed by Firebase
-        )
-        db.add(user)
-        await db.commit()
-        await db.refresh(user)
-        
-    return int(user.id) # type: ignore
 
 @router.post("", response_model=ProjectResponse, status_code=status.HTTP_201_CREATED)
 async def create_project(project_in: ProjectCreate, db: AsyncSession = Depends(get_db), current_user_id: int = Depends(get_current_user_id)):
