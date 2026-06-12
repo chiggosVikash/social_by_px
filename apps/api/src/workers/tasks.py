@@ -48,9 +48,10 @@ async def _run_workflow_async(run_id: int):
     async with maker() as db:
         from models.core import WorkflowRun
         from sqlalchemy import select
+        from sqlalchemy.orm import selectinload
         
         # Fetch the workflow run
-        result = await db.execute(select(WorkflowRun).where(WorkflowRun.id == run_id))
+        result = await db.execute(select(WorkflowRun).options(selectinload(WorkflowRun.project)).where(WorkflowRun.id == run_id))
         workflow_run = result.scalar_one_or_none()
         
         if not workflow_run:
@@ -59,9 +60,10 @@ async def _run_workflow_async(run_id: int):
             return
 
         project_id: int = workflow_run.project_id # type: ignore
+        owner_id: int = workflow_run.project.owner_id # type: ignore
 
         # Fetch project with keywords
-        project = await project_repo.get_with_keywords(db, id=project_id, owner_id=1) # [YAGNI-WARN] Owner ID mocked as 1 for now
+        project = await project_repo.get_with_keywords(db, id=project_id, owner_id=owner_id)
         if not project:
             logger.warning(f"Project {project_id} not found.")
             workflow_run.status = "Failed" # type: ignore
