@@ -25,6 +25,18 @@ class Project(Base):
     owner = relationship("User", back_populates="projects")
     keywords = relationship("ProjectKeyword", back_populates="project")
     articles = relationship("Article", back_populates="project")
+    workflow_runs = relationship("WorkflowRun", back_populates="project", cascade="all, delete-orphan")
+
+class WorkflowRun(Base):
+    __tablename__ = "workflow_runs"
+    id = Column(Integer, primary_key=True, index=True)
+    project_id = Column(Integer, ForeignKey("projects.id"))
+    status = Column(String, nullable=False)
+    started_at = Column(DateTime, default=func.now())
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+    error_message = Column(Text, nullable=True)
+    
+    project = relationship("Project", back_populates="workflow_runs")
 
 class ProjectKeyword(Base):
     __tablename__ = "project_keywords"

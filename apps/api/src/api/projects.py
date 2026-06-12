@@ -40,19 +40,35 @@ async def run_project_workflow(project_id: int, db: AsyncSession = Depends(get_d
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
     
+    from models.core import WorkflowRun
+    workflow_run = WorkflowRun(
+        project_id=project_id,
+        status="Starting workflow..."
+    )
+    db.add(workflow_run)
+    await db.commit()
+    await db.refresh(workflow_run)
+    
     from workers.queue import enqueue_workflow
-    enqueue_workflow(project_id)
+    enqueue_workflow(workflow_run.id) # type: ignore
     return {"message": "Workflow queued successfully"}
 
 @router.get("/{project_id}/status")
-async def get_workflow_status(project_id: int, current_user_id: int = Depends(get_current_user_id)):
-    from workers.queue import redis_conn
-    status_val = redis_conn.get(f"workflow:project:{project_id}:status")
+async def get_workflow_status(project_id: int, db: AsyncSession = Depends(get_db), current_user_id: int = Depends(get_current_user_id)):
+    from models.core import WorkflowRun
+    from sqlalchemy import select
     
-    if status_val:
-        if isinstance(status_val, bytes):
-            return {"status": status_val.decode('utf-8')}
-        return {"status": str(status_val)}
+    result = await db.execute(
+        select(WorkflowRun)
+        .where(WorkflowRun.project_id == project_id)
+        .order_by(WorkflowRun.started_at.desc())
+        .limit(1)
+    )
+    latest_run = result.scalar_one_or_none()
+    
+    if latest_run:
+        return {"status": latest_run.status}
+        
     return {"status": "Not started"}
 
 @router.get("/{project_id}/preview")
