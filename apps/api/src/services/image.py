@@ -2,19 +2,24 @@ import base64
 import io
 import logging
 from typing import Optional
+from abc import ABC, abstractmethod
 from PIL import Image
 from openai import AsyncOpenAI
 from core.config import get_settings
 
 logger = logging.getLogger(__name__)
 
-class ImageGenerationService:
-    @staticmethod
-    async def generate_image(prompt: str) -> Optional[bytes]:
-        """
-        Generates an image using OpenAI's DALL-E model via the Responses API.
-        Returns the raw image bytes if successful, None otherwise.
-        """
+# [PATTERN: Strategy] - Abstract base class for image generation
+class ImageGenerationStrategy(ABC):
+    @abstractmethod
+    async def generate_image(self, prompt: str) -> Optional[bytes]:
+        """Generate an image from a prompt and return the raw bytes."""
+        pass
+
+
+# [SOLID: OCP] - Concrete Strategy for OpenAI DALL-E
+class OpenAIImageStrategy(ImageGenerationStrategy):
+    async def generate_image(self, prompt: str) -> Optional[bytes]:
         settings = get_settings()
         if not settings.OPENAI_API_KEY:
             raise RuntimeError("OPENAI_API_KEY is not set.")
@@ -29,7 +34,7 @@ class ImageGenerationService:
                 tools=[{"type": "image_generation"}],
             )
         except Exception as api_e:
-            logger.error(f"Failed to generate image with gpt-5.5: {api_e}")
+            logger.error(f"Failed to generate image with OpenAI: {api_e}")
             return None
             
         if not response or not response.output:
@@ -46,8 +51,37 @@ class ImageGenerationService:
             return None
             
         image_base64 = image_data_list[0]
-        image_bytes = base64.b64decode(image_base64)
-        return image_bytes
+        return base64.b64decode(image_base64)
+
+
+# [SOLID: OCP] - Example placeholder for future OpenRouter Strategy
+class OpenRouterImageStrategy(ImageGenerationStrategy):
+    async def generate_image(self, prompt: str) -> Optional[bytes]:
+        # TODO: Implement OpenRouter / DeepSeek logic here in the future
+        logger.info("OpenRouter strategy called but not yet implemented.")
+        raise NotImplementedError("OpenRouter integration coming soon")
+
+
+# [SOLID: DIP] - Service depends on abstraction
+class ImageGenerationService:
+    """
+    Context class that uses an injected ImageGenerationStrategy to generate images.
+    """
+    def __init__(self, strategy: ImageGenerationStrategy):
+        self._strategy = strategy
+
+    async def generate(self, prompt: str) -> Optional[bytes]:
+        return await self._strategy.generate_image(prompt)
+
+
+# [PATTERN: Factory] - Centralized instantiation
+def get_image_generation_service() -> ImageGenerationService:
+    """
+    Factory to resolve the correct strategy. 
+    In the future, you can read from `get_settings().IMAGE_PROVIDER` to choose between OpenAI, OpenRouter, etc.
+    """
+    strategy = OpenAIImageStrategy()
+    return ImageGenerationService(strategy)
 
 
 class ImageOptimizationService:

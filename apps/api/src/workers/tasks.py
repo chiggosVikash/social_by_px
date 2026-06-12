@@ -18,7 +18,7 @@ from agents.graph import app_graph
 from agents.state import GraphState
 from agents.nodes import content_generation_agent, slide_verification_agent
 from services.storage import upload_file
-from services.image import ImageGenerationService, ImageOptimizationService
+from services.image import get_image_generation_service, ImageOptimizationService
 
 logger = logging.getLogger(__name__)
 
@@ -297,7 +297,8 @@ async def _run_image_generation_async(article_id: int):
                 image_prompt = f"Abstract background for a social media slide. Minimalist, modern, beautiful, subtle. Theme: {prompt_source[:500]}"
                 image_prompt = image_prompt[:950]
                 
-                raw_image_bytes = await ImageGenerationService.generate_image(image_prompt)
+                image_service = get_image_generation_service()
+                raw_image_bytes = await image_service.generate(image_prompt)
                 
                 if raw_image_bytes:
                     logger.info("Successfully generated image. Optimizing...")
