@@ -118,7 +118,16 @@ export default function DashboardPage() {
               </CardHeader>
               <CardContent>
                 <div className="pt-4 mt-2 border-t border-border/40">
-                  <Button className="w-full justify-between rounded-lg font-medium bg-secondary text-secondary-foreground hover:bg-primary hover:text-primary-foreground group/btn transition-colors">
+                  <Button 
+                    className="w-full justify-between rounded-lg font-medium bg-secondary text-secondary-foreground hover:bg-primary hover:text-primary-foreground group/btn transition-colors"
+                    onClick={() => {
+                      useProjectStore.getState().runWorkflow(project.id).then(() => {
+                        alert("Workflow queued successfully!");
+                      }).catch(() => {
+                        alert("Failed to queue workflow. Check the console.");
+                      });
+                    }}
+                  >
                     <span className="flex items-center">
                       <Play className="mr-2 h-4 w-4" /> Run Workflow
                     </span>

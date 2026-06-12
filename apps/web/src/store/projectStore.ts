@@ -17,6 +17,7 @@ export interface ProjectState {
 export interface ProjectActions {
   fetchProjects: () => Promise<void>;
   createProject: (data: { name: string; industry: string; keywords: string[] }) => Promise<void>;
+  runWorkflow: (projectId: number) => Promise<void>;
 }
 
 export type ProjectStore = ProjectState & ProjectActions;
@@ -44,6 +45,14 @@ export const useProjectStore = create<ProjectStore>()(
       } catch (err: any) {
         console.error("Failed to create project", err);
         set({ error: 'Failed to create project', isLoading: false });
+        throw err;
+      }
+    },
+    runWorkflow: async (projectId) => {
+      try {
+        await apiClient.post(`/projects/${projectId}/workflow`);
+      } catch (err: any) {
+        console.error("Failed to queue workflow", err);
         throw err;
       }
     },

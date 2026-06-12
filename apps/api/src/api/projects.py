@@ -45,3 +45,13 @@ async def delete_project(project_id: int, db: AsyncSession = Depends(get_db), cu
     
     await project_repo.remove(db=db, id=project.id)
     return None
+
+@router.post("/{project_id}/workflow", status_code=status.HTTP_202_ACCEPTED)
+async def run_project_workflow(project_id: int, db: AsyncSession = Depends(get_db), current_user_id: int = Depends(get_current_user_id)):
+    project = await project_repo.get_with_keywords(db=db, id=project_id, owner_id=current_user_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    from workers.queue import enqueue_workflow
+    enqueue_workflow(project_id)
+    return {"message": "Workflow queued successfully"}

@@ -91,7 +91,7 @@ Start the RQ worker (in a separate terminal) for background jobs:
 
 ```bash
 cd apps/api
-uv run rq worker
+OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES PYTHONPATH=src uv run rq worker workflow default
 ```
 
 ### 4. Frontend Setup (`apps/web`)
