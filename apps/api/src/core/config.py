@@ -31,6 +31,7 @@ class Settings(BaseSettings):
     TAVILY_API_KEY: str = ""
     
     # Meta
+    META_GRAPH_API_URL: str = "https://graph.facebook.com/v19.0"
     META_APP_ID: str = ""
     META_APP_SECRET: str = ""
     

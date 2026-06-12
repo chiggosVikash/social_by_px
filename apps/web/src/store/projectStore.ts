@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { subscribeWithSelector } from 'zustand/middleware';
-import axios from 'axios';
+import { apiClient } from '../lib/api-client';
 
 export interface Project {
   id: number;
@@ -28,8 +28,7 @@ export const useProjectStore = create<ProjectStore>()(
     fetchProjects: async () => {
       set({ isLoading: true, error: null });
       try {
-        const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
-        const response = await axios.get<Project[]>(`${API_URL}/projects`);
+        const response = await apiClient.get<Project[]>('/projects');
         set({ projects: response.data, isLoading: false });
       } catch {
         set({ error: 'Failed to fetch projects', isLoading: false });

@@ -66,7 +66,7 @@ export function ApprovalList({ initialItems }: { initialItems: ApprovalItem[] })
             <Button variant="destructive" onClick={() => handleReject(item.id)}>
               <X className="mr-2 h-4 w-4" /> Reject
             </Button>
-            <Button className="bg-green-600 hover:bg-green-700 text-white" onClick={() => handleApprove(item.id)}>
+            <Button className="bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm transition-all duration-200 hover:shadow-md hover:-translate-y-0.5" onClick={() => handleApprove(item.id)}>
               <Check className="mr-2 h-4 w-4" /> Approve & Publish
             </Button>
           </CardFooter>

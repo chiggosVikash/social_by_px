@@ -1,10 +1,9 @@
 import boto3
+import asyncio
 from botocore.config import Config
 from core.config import get_settings
 
-settings = get_settings()
-
-def get_s3_client():
+def get_s3_client(settings):
     if not settings.CLOUDFLARE_R2_ACCESS_KEY_ID:
         return None
         
@@ -17,20 +16,25 @@ def get_s3_client():
         region_name='auto'
     )
 
-def upload_file(file_data: bytes, file_name: str, content_type: str = "image/png") -> str:
+async def upload_file(file_data: bytes, file_name: str, content_type: str = "image/png") -> str:
     """Uploads a file to Cloudflare R2 and returns the public URL."""
-    client = get_s3_client()
+    settings = get_settings()
+    client = get_s3_client(settings)
     if not client:
         # For local development without R2 configured
         return f"http://localhost:8000/static/{file_name}"
         
     bucket = settings.CLOUDFLARE_R2_BUCKET_NAME
-    client.put_object(
-        Bucket=bucket,
-        Key=file_name,
-        Body=file_data,
-        ContentType=content_type
-    )
+    
+    def _upload():
+        client.put_object(
+            Bucket=bucket,
+            Key=file_name,
+            Body=file_data,
+            ContentType=content_type
+        )
+        
+    await asyncio.to_thread(_upload)
     
     # Returning a generic URL structure; actual custom domain can be appended
     return f"{settings.CLOUDFLARE_R2_ENDPOINT_URL}/{bucket}/{file_name}"
