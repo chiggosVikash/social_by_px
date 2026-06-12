@@ -9,7 +9,17 @@ from repositories.project import project_repo
 router = APIRouter(prefix="/projects", tags=["projects"])
 
 # Mocking authentication for now
-async def get_current_user_id() -> int:
+async def get_current_user_id(db: AsyncSession = Depends(get_db)) -> int:
+    from models.core import User
+    from sqlalchemy.future import select
+    
+    result = await db.execute(select(User).where(User.id == 1))
+    user = result.scalar_one_or_none()
+    if not user:
+        user = User(id=1, email="test@example.com", hashed_password="mock")
+        db.add(user)
+        await db.commit()
+    
     return 1 # We will implement real auth later
 
 @router.post("", response_model=ProjectResponse, status_code=status.HTTP_201_CREATED)
