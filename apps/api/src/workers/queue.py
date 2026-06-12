@@ -18,3 +18,9 @@ def enqueue_workflow(run_id: int):
     from workers.tasks import run_workflow_task
     job = workflow_queue.enqueue(run_workflow_task, run_id)
     return job.id
+
+def enqueue_article_regeneration(article_id: int):
+    """Enqueues a background task to regenerate slides for an article."""
+    from workers.tasks import run_article_regeneration_task
+    job = workflow_queue.enqueue(run_article_regeneration_task, article_id)
+    return job.id

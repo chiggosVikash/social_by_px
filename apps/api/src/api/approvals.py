@@ -10,6 +10,7 @@ router = APIRouter(prefix="/approvals", tags=["Approvals"])
 
 class ApprovalItemOut(BaseModel):
     id: int
+    project_id: int
     project_name: str
     article_title: str
     slides: List[str]
@@ -31,6 +32,7 @@ async def get_pending_approvals(
         
         items.append(ApprovalItemOut(
             id=article.id,
+            project_id=article.project_id, # type: ignore
             project_name=article.project.name if article.project else "Unknown Project",
             article_title=article.title,
             slides=slides_content
@@ -98,3 +100,32 @@ async def reject_article(
         db, 
         "Article rejected successfully"
     )
+
+@router.post("/{article_id}/regenerate", response_model=StatusUpdateResponse)
+async def regenerate_article(
+    article_id: int,
+    db: AsyncSession = Depends(get_db),
+    user_id: int = Depends(get_current_user_id)
+):
+    """
+    Queue an article for regeneration.
+    """
+    from models.core import Article, Project
+    from sqlalchemy.future import select
+    result = await db.execute(
+        select(Article)
+        .join(Project, Article.project_id == Project.id)
+        .where(Article.id == article_id, Project.owner_id == user_id)
+    )
+    article = result.scalar_one_or_none()
+    
+    if not article:
+        raise HTTPException(status_code=404, detail="Article not found or you do not have permission")
+        
+    article.status = "regenerating"
+    await db.commit()
+    
+    from workers.queue import enqueue_article_regeneration
+    enqueue_article_regeneration(article_id)
+    
+    return StatusUpdateResponse(message="Regeneration queued successfully", id=article_id)

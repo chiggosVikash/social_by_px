@@ -139,3 +139,98 @@ async def _run_workflow_async(run_id: int):
             await publish_progress(redis_client, project_id, "Failed", is_failed=True)
         finally:
             await redis_client.aclose()
+
+
+def run_article_regeneration_task(article_id: int):
+    asyncio.run(_run_article_regeneration_async(article_id))
+
+async def _run_article_regeneration_async(article_id: int):
+    settings = get_settings()
+    redis_client = redis.from_url(settings.REDIS_URL)
+    
+    maker = db_session.async_session_maker or db_session.init_db()
+    async with maker() as db:
+        from models.core import Article, Slide
+        from sqlalchemy import select
+        from sqlalchemy.orm import selectinload
+        
+        result = await db.execute(
+            select(Article)
+            .options(selectinload(Article.project), selectinload(Article.slides))
+            .where(Article.id == article_id)
+        )
+        article = result.scalar_one_or_none()
+        
+        if not article:
+            logger.error(f"Article {article_id} not found.")
+            await redis_client.aclose()
+            return
+
+        project_id: int = article.project_id # type: ignore
+        project = article.project
+        
+        try:
+            await publish_progress(redis_client, project_id, "Regenerating article...")
+            
+            # Setup a mini GraphState
+            state: GraphState = {
+                "project_id": project_id, # type: ignore
+                "keywords": [k.keyword for k in project.keywords] if hasattr(project, "keywords") else [],
+                "industry": str(project.industry or ""),
+                "search_queries": [],
+                "current_articles": [],
+                "retries": 0,
+                "approved_articles": [{
+                    "title": str(article.title or ""),
+                    "url": str(article.url or ""),
+                    "summary": str(article.summary or ""),
+                    "source": str(article.source or ""),
+                    "published_date": article.published_date.isoformat() if article.published_date else ""
+                }],
+                "generated_slides": {},
+                "approved_slides": {},
+                "publish_status": ""
+            }
+            
+            await publish_progress(redis_client, project_id, "Agent 'generate' is working...")
+            from agents.nodes import content_generation_agent, slide_verification_agent
+            
+            # Run generation directly
+            state = content_generation_agent(state)
+            
+            await publish_progress(redis_client, project_id, "Agent 'verify_slides' is working...")
+            state = slide_verification_agent(state)
+            
+            # Check if we got approved slides
+            approved_slides = state.get("approved_slides", {}).get(article.url, [])
+            if not approved_slides:
+                raise RuntimeError("Slide generation failed validation.")
+            
+            # Delete old slides
+            for old_slide in list(article.slides):
+                await db.delete(old_slide)
+            
+            # Insert new slides
+            for i, slide_data in enumerate(approved_slides):
+                slide = Slide(
+                    article_id=article.id,
+                    order_index=i,
+                    hook_type=slide_data.get("hook_type", ""),
+                    text_content=slide_data.get("text_content", ""),
+                    caption=slide_data.get("caption", ""),
+                    emoji=slide_data.get("emoji", "")
+                )
+                db.add(slide)
+            
+            article.status = "pending" # Back to pending approval
+            await db.commit()
+            
+            await publish_progress(redis_client, project_id, "Completed")
+            
+        except Exception as e:
+            logger.exception(f"Regeneration for article {article_id} failed: {e}")
+            article.status = "pending" # revert
+            await db.commit()
+            await publish_progress(redis_client, project_id, "Failed", is_failed=True)
+        finally:
+            await redis_client.aclose()

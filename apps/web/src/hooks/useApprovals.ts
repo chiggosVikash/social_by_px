@@ -4,6 +4,7 @@ import { apiClient } from "@/lib/api-client";
 
 export interface ApprovalItem {
   id: number;
+  project_id: number;
   project_name: string;
   article_title: string;
   slides: string[];
@@ -51,7 +52,13 @@ export function useApprovals() {
   };
 
   const handleRegenerate = async (id: number) => {
-    toast.info("Regeneration queued.");
+    try {
+      await apiClient.post(`/approvals/${id}/regenerate`);
+      toast.success("Carousel regeneration started!");
+    } catch (error) {
+      console.error("Regeneration failed:", error);
+      toast.error("Failed to start regeneration.");
+    }
   };
 
   return {
