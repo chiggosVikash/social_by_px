@@ -150,13 +150,16 @@ async def _run_article_regeneration_async(article_id: int):
     
     maker = db_session.async_session_maker or db_session.init_db()
     async with maker() as db:
-        from models.core import Article, Slide
+        from models.core import Article, Slide, Project
         from sqlalchemy import select
         from sqlalchemy.orm import selectinload
         
         result = await db.execute(
             select(Article)
-            .options(selectinload(Article.project), selectinload(Article.slides))
+            .options(
+                selectinload(Article.project).selectinload(Project.keywords),
+                selectinload(Article.slides)
+            )
             .where(Article.id == article_id)
         )
         article = result.scalar_one_or_none()

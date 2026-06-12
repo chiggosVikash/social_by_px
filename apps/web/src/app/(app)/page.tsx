@@ -40,20 +40,33 @@ function ProjectCard({ project }: { project: Project }) {
   const [status, setStatus] = useState<string>("Not started");
   const [progressValue, setProgressValue] = useState<number>(0);
   const [isFailed, setIsFailed] = useState<boolean>(false);
+  const [shouldConnect, setShouldConnect] = useState(false);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const fetchProjectStatus = useProjectStore((state) => state.fetchProjectStatus);
   const runWorkflow = useProjectStore((state) => state.runWorkflow);
 
+  // Initial fetch
   useEffect(() => {
-    // Initial fetch
+    let isMounted = true;
     fetchProjectStatus(project.id).then(s => {
+      if (!isMounted) return;
       setStatus(s);
       setProgressValue(getProgressValue(s));
-      setIsFailed(s === "Failed" || s.toLowerCase().includes("fail"));
+      const failed = s === "Failed" || s.toLowerCase().includes("fail");
+      setIsFailed(failed);
+      
+      // Only connect if the workflow is actively running or not started yet
+      if (s !== "Completed" && !failed) {
+        setShouldConnect(true);
+      }
     });
+    return () => { isMounted = false; };
   }, [project.id, fetchProjectStatus]);
 
+  // WebSocket connection
   useEffect(() => {
+    if (!shouldConnect) return;
+
     let ws: WebSocket | null = null;
     let reconnectTimeout: NodeJS.Timeout;
     let isMounted = true;
@@ -69,15 +82,21 @@ function ProjectCard({ project }: { project: Project }) {
           const data = JSON.parse(event.data);
           setStatus(data.status);
           setProgressValue(data.progress);
-          setIsFailed(data.is_failed);
+          const failed = data.is_failed || data.status === "Failed" || data.status.toLowerCase().includes("fail");
+          setIsFailed(failed);
+
+          // [SOLID: SRP] — Project status management auto-disconnects when terminal state is reached
+          if (data.status === "Completed" || failed) {
+             setShouldConnect(false); // Automatically triggers unmount/cleanup of this WS
+          }
         } catch (e) {
           console.error("Failed to parse websocket message", e);
         }
       };
 
       ws.onclose = () => {
-        // Reconnect after 3 seconds if the component is still mounted
-        if (isMounted) {
+        // Reconnect after 3 seconds if the component is still mounted AND we should still be connected
+        if (isMounted && shouldConnect) {
           reconnectTimeout = setTimeout(connect, 3000);
         }
       };
@@ -95,7 +114,7 @@ function ProjectCard({ project }: { project: Project }) {
       clearTimeout(reconnectTimeout);
       ws?.close();
     };
-  }, [project.id]);
+  }, [project.id, shouldConnect]);
 
   const handleRunWorkflow = async () => {
     try {
