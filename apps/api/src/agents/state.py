@@ -9,8 +9,11 @@ class ArticleData(TypedDict):
     summary: str
 
 class SlideData(TypedDict):
-    text_content: str
-    image_prompt: str
+    hook_type: str       # "question" | "statistic" | "bold_claim" | "story" | "cta"
+    text_content: str    # Main copy (up to 280 chars)
+    caption: str         # Supporting context or subtitle
+    image_prompt: str    # Detailed, style-specific image generation prompt
+    emoji: str           # Contextual emoji for visual punch
 
 class GraphState(TypedDict):
     project_id: int

@@ -79,8 +79,11 @@ class Slide(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     article_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("articles.id"))
     order_index: Mapped[int] = mapped_column(Integer, nullable=False)
+    hook_type: Mapped[Optional[str]] = mapped_column(String, nullable=True)  # question | statistic | bold_claim | story | cta
     image_url: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     text_content: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    caption: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    emoji: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)
     
     article: Mapped["Article"] = relationship("Article", back_populates="slides")
 

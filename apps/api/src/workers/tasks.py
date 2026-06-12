@@ -94,20 +94,34 @@ async def _run_workflow_async(run_id: int):
             await db.commit()
             await publish_progress(redis_client, project_id, "Starting workflow...")
             
-            final_state = initial_state
-            async for event in app_graph.astream(initial_state, stream_mode="updates"):
-                # The event contains a mapping of node_name -> state_update
-                for node_name, state_update in event.items():
-                    logger.info(f"Agent '{node_name}' finished processing for project {project_id}.")
-                    status_msg = f"Agent '{node_name}' is working..."
-                    workflow_run.status = status_msg # type: ignore
-                    await db.commit()
-                    await publish_progress(redis_client, project_id, status_msg)
-                    
-                    # Update final_state with the latest updates from this node
-                    final_state = {**final_state, **state_update}
+            # Use astream to track progress, then get final accumulated state
+            final_state = None
+            async for event in app_graph.astream(initial_state, stream_mode="values"):
+                # In "values" mode, each event is the full accumulated state after a node runs
+                final_state = event
+                # Infer which node just ran from the status changes
+                status_parts = []
+                if event.get("current_articles"):
+                    status_parts.append("research")
+                if event.get("approved_articles"):
+                    status_parts.append("verify")
+                if event.get("generated_slides"):
+                    status_parts.append("generate")
+                if event.get("approved_slides"):
+                    status_parts.append("verify_slides")
+                if event.get("publish_status"):
+                    status_parts.append("publish")
+                
+                latest_node = status_parts[-1] if status_parts else "starting"
+                status_msg = f"Agent '{latest_node}' is working..."
+                workflow_run.status = status_msg # type: ignore
+                await db.commit()
+                await publish_progress(redis_client, project_id, status_msg)
 
-            logger.info(f"Workflow completed for project {project_id}. Final state keys: {final_state.keys()}")
+            if not final_state:
+                raise RuntimeError("Workflow produced no output")
+
+            logger.info(f"Workflow completed for project {project_id}. approved_articles={len(final_state.get('approved_articles', []))}, approved_slides={len(final_state.get('approved_slides', {}))}")
             
             # Save results to DB using the extracted repository logic
             await article_repo.save_workflow_results(db, project_id, final_state) # type: ignore

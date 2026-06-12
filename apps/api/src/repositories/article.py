@@ -32,7 +32,10 @@ class ArticleRepository:
                     slide = Slide(
                         article_id=article.id,
                         order_index=i,
-                        text_content=slide_data.get("text_content", "")
+                        hook_type=slide_data.get("hook_type", ""),
+                        text_content=slide_data.get("text_content", ""),
+                        caption=slide_data.get("caption", ""),
+                        emoji=slide_data.get("emoji", "")
                     )
                     db.add(slide)
         

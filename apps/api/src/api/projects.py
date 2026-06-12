@@ -89,8 +89,11 @@ async def get_project_preview(project_id: int, db: AsyncSession = Depends(get_db
                 {
                     "id": slide.id,
                     "order_index": slide.order_index,
+                    "hook_type": slide.hook_type,
                     "text_content": slide.text_content,
-                    "image_url": slide.image_url
+                    "caption": slide.caption,
+                    "image_url": slide.image_url,
+                    "emoji": slide.emoji
                 } for slide in sorted(article.slides, key=lambda s: s.order_index)
             ]
         })

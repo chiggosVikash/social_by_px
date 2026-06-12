@@ -151,7 +151,7 @@ function ProjectCard({ project }: { project: Project }) {
               Settings
             </DropdownMenuItem>
             
-            <DropdownMenuItem onSelect={() => setIsPreviewOpen(true)} className="cursor-pointer">
+            <DropdownMenuItem onClick={() => setIsPreviewOpen(true)} className="cursor-pointer">
               <div className="flex items-center w-full">
                 <Eye className="mr-2 h-4 w-4" />
                 View Content
