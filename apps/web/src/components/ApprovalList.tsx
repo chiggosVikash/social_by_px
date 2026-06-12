@@ -22,7 +22,11 @@ function ApprovalCard({
   const [progressValue, setProgressValue] = useState<number>(0);
   const [isFailed, setIsFailed] = useState<boolean>(false);
 
+  const [shouldConnect, setShouldConnect] = useState(false);
+
   useEffect(() => {
+    if (!shouldConnect) return;
+
     let ws: WebSocket | null = null;
     let reconnectTimeout: NodeJS.Timeout;
     let isMounted = true;
@@ -40,12 +44,18 @@ function ApprovalCard({
           if (status !== "pending") {
             setStatus(data.status);
             setProgressValue(data.progress);
-            setIsFailed(data.is_failed);
-            if (data.status === "Completed") {
-              // Wait a bit to show 100%, then reload the page to fetch the newly generated slides
-              setTimeout(() => {
-                window.location.reload();
-              }, 1000);
+            const failed = data.is_failed || data.status === "Failed" || data.status.toLowerCase().includes("fail");
+            setIsFailed(failed);
+            
+            if (data.status === "Completed" || failed) {
+              setShouldConnect(false); // [SOLID: SRP] Auto-cleanup WebSocket when done
+              
+              if (!failed) {
+                // Wait a bit to show 100%, then reload the page to fetch the newly generated slides
+                setTimeout(() => {
+                  window.location.reload();
+                }, 1000);
+              }
             }
           }
         } catch (e) {
@@ -54,7 +64,7 @@ function ApprovalCard({
       };
 
       ws.onclose = () => {
-        if (isMounted) {
+        if (isMounted && shouldConnect) {
           reconnectTimeout = setTimeout(connect, 3000);
         }
       };
@@ -71,12 +81,13 @@ function ApprovalCard({
       clearTimeout(reconnectTimeout);
       ws?.close();
     };
-  }, [item.project_id, status]);
+  }, [item.project_id, status, shouldConnect]);
 
   const onRegenerate = async () => {
     setStatus("Regenerating article...");
     setProgressValue(5);
     setIsFailed(false);
+    setShouldConnect(true);
     await handleRegenerate(item.id);
   };
 
