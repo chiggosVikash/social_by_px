@@ -43,5 +43,9 @@ async def upload_file(file_data: bytes, file_name: str, content_type: str = "ima
         
     await asyncio.to_thread(_upload)
     
-    # Returning a generic URL structure; actual custom domain can be appended
+    # Return public URL if configured, otherwise fall back to endpoint URL
+    if settings.CLOUDFLARE_R2_PUBLIC_URL:
+        public_url = settings.CLOUDFLARE_R2_PUBLIC_URL.rstrip("/")
+        return f"{public_url}/{file_name}"
+        
     return f"{settings.CLOUDFLARE_R2_ENDPOINT_URL}/{bucket}/{file_name}"

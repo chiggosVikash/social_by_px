@@ -1,11 +1,115 @@
 import json
+import logging
+from typing import Any
 from .state import GraphState, ArticleData, SlideData
 from langchain_openai import ChatOpenAI
-from langchain_core.messages import SystemMessage, HumanMessage
+from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
 from core.config import get_settings
 
+logger = logging.getLogger(__name__)
+
+class ChatGeminiResponse:
+    def __init__(self, content: str):
+        self.content = content
+
+class ChatGeminiGemma:
+    """
+    Custom client to interact with Google Gemini/Gemma API using httpx,
+    mimicking the LangChain ChatOpenAI invoke interface.
+    """
+    def __init__(self, model: str, api_key: str, temperature: float = 0.7):
+        self.model = model
+        self.api_key = api_key
+        self.temperature = temperature
+
+    def invoke(self, messages) -> ChatGeminiResponse:
+        import httpx
+        from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
+
+        system_instruction = None
+        contents = []
+
+        for msg in messages:
+            if isinstance(msg, SystemMessage):
+                system_instruction = {
+                    "parts": [{"text": msg.content}]
+                }
+            elif isinstance(msg, HumanMessage):
+                contents.append({
+                    "role": "user",
+                    "parts": [{"text": msg.content}]
+                })
+            elif isinstance(msg, AIMessage):
+                contents.append({
+                    "role": "model",
+                    "parts": [{"text": msg.content}]
+                })
+            else:
+                role = getattr(msg, "type", "user")
+                if role == "system":
+                    system_instruction = {
+                        "parts": [{"text": getattr(msg, "content", str(msg))}]
+                    }
+                else:
+                    role_name = "user" if role == "human" else "model"
+                    contents.append({
+                        "role": role_name,
+                        "parts": [{"text": getattr(msg, "content", str(msg))}]
+                    })
+
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{self.model}:generateContent"
+        
+        headers = {
+            "Content-Type": "application/json",
+            "x-goog-api-key": self.api_key
+        }
+
+        payload: dict[str, Any] = {
+            "contents": contents,
+            "generationConfig": {
+                "temperature": self.temperature
+            }
+        }
+        if system_instruction:
+            payload["systemInstruction"] = system_instruction
+
+        try:
+            logger.info(f"Calling Gemini API with model: {self.model}")
+            resp = httpx.post(url, json=payload, headers=headers, timeout=60.0)
+            resp.raise_for_status()
+            resp_data = resp.json()
+            
+            candidates = resp_data.get("candidates", [])
+            if not candidates:
+                raise RuntimeError(f"Gemini API returned no candidates. Response: {resp_data}")
+                
+            candidate = candidates[0]
+            content_obj = candidate.get("content", {})
+            parts = content_obj.get("parts", [])
+            if not parts:
+                raise RuntimeError(f"Gemini API candidate content has no parts. Response: {resp_data}")
+                
+            text = parts[0].get("text", "")
+            return ChatGeminiResponse(content=text)
+        except Exception as e:
+            logger.error(f"Gemini API call failed: {e}")
+            raise RuntimeError(f"Gemini API call failed: {e}")
+
+# [PATTERN: Strategy] — Bypasses ChatOpenAI to use ChatGeminiGemma if API keys are set
 def get_llm(temperature: float = 0.7):
     settings = get_settings()
+    
+    # If Gemini API Key is configured, use the custom Gemma API client
+    api_key = settings.GEMINI_API_KEY
+    if api_key:
+        model = settings.GEMINI_MODEL or "gemma-4-31b-it"
+        return ChatGeminiGemma(
+            model=model,
+            api_key=api_key,
+            temperature=temperature
+        )
+        
+    # Fallback to OpenAI
     return ChatOpenAI(
         model="gpt-4o", 
         api_key=settings.OPENAI_API_KEY,

@@ -37,3 +37,106 @@ async def test_composite_text_on_background():
         out_img = Image.open(io.BytesIO(rendered_bytes))
         assert out_img.format == "WEBP"
         assert out_img.size == (1080, 1080)
+
+
+@pytest.mark.asyncio
+async def test_composite_text_on_background_r2_direct():
+    # 1. Create a dummy background image bytes
+    bg_img = Image.new("RGB", (500, 800), color="red")
+    bg_bytes = io.BytesIO()
+    bg_img.save(bg_bytes, format="JPEG")
+    bg_bytes = bg_bytes.getvalue()
+
+    # Mock settings
+    mock_settings = MagicMock()
+    mock_settings.CLOUDFLARE_R2_ACCESS_KEY_ID = "test-key"
+    mock_settings.CLOUDFLARE_R2_SECRET_ACCESS_KEY = "test-secret"
+    mock_settings.CLOUDFLARE_R2_ENDPOINT_URL = "https://mock-endpoint.r2.cloudflarestorage.com"
+    mock_settings.CLOUDFLARE_R2_BUCKET_NAME = "mock-bucket"
+
+    # Mock S3 Client
+    mock_s3_client = MagicMock()
+    mock_response = {
+        'Body': MagicMock(read=lambda: bg_bytes)
+    }
+    mock_s3_client.get_object.return_value = mock_response
+
+    with patch("core.config.get_settings", return_value=mock_settings), \
+         patch("services.storage.get_s3_client", return_value=mock_s3_client) as mock_get_s3, \
+         patch("services.renderer.httpx.get") as mock_httpx_get:
+
+        # 3. Call the composite function with a URL starting with mock-endpoint
+        rendered_bytes = await composite_text_on_background(
+            text_content="Slide content with R2 download",
+            emoji="🍕",
+            caption="Direct download test",
+            background_url="https://mock-endpoint.r2.cloudflarestorage.com/mock-bucket/projects/project_11_background_921b53ad.jpg",
+            slide_index=0,
+            total_slides=5
+        )
+
+        # Verify S3 client was used and httpx was NOT used
+        mock_get_s3.assert_called_once()
+        mock_s3_client.get_object.assert_called_once_with(
+            Bucket="mock-bucket",
+            Key="projects/project_11_background_921b53ad.jpg"
+        )
+        mock_httpx_get.assert_not_called()
+
+        # Verify output is a valid WebP image of exactly 1080x1080
+        out_img = Image.open(io.BytesIO(rendered_bytes))
+        assert out_img.format == "WEBP"
+        assert out_img.size == (1080, 1080)
+
+
+@pytest.mark.asyncio
+async def test_composite_text_on_background_r2_public_direct():
+    # 1. Create a dummy background image bytes
+    bg_img = Image.new("RGB", (500, 800), color="green")
+    bg_bytes = io.BytesIO()
+    bg_img.save(bg_bytes, format="JPEG")
+    bg_bytes = bg_bytes.getvalue()
+
+    # Mock settings
+    mock_settings = MagicMock()
+    mock_settings.CLOUDFLARE_R2_ACCESS_KEY_ID = "test-key"
+    mock_settings.CLOUDFLARE_R2_SECRET_ACCESS_KEY = "test-secret"
+    mock_settings.CLOUDFLARE_R2_ENDPOINT_URL = "https://mock-endpoint.r2.cloudflarestorage.com"
+    mock_settings.CLOUDFLARE_R2_BUCKET_NAME = "mock-bucket"
+    mock_settings.CLOUDFLARE_R2_PUBLIC_URL = "https://pub-mock.r2.dev"
+
+    # Mock S3 Client
+    mock_s3_client = MagicMock()
+    mock_response = {
+        'Body': MagicMock(read=lambda: bg_bytes)
+    }
+    mock_s3_client.get_object.return_value = mock_response
+
+    with patch("core.config.get_settings", return_value=mock_settings), \
+         patch("services.storage.get_s3_client", return_value=mock_s3_client) as mock_get_s3, \
+         patch("services.renderer.httpx.get") as mock_httpx_get:
+
+        # 3. Call the composite function with a public dev URL
+        rendered_bytes = await composite_text_on_background(
+            text_content="Slide content with R2 public download",
+            emoji="🍣",
+            caption="Public direct download test",
+            background_url="https://pub-mock.r2.dev/projects/project_11_background_921b53ad.jpg",
+            slide_index=0,
+            total_slides=5
+        )
+
+        # Verify S3 client was used and httpx was NOT used
+        mock_get_s3.assert_called_once()
+        mock_s3_client.get_object.assert_called_once_with(
+            Bucket="mock-bucket",
+            Key="projects/project_11_background_921b53ad.jpg"
+        )
+        mock_httpx_get.assert_not_called()
+
+        # Verify output is a valid WebP image of exactly 1080x1080
+        out_img = Image.open(io.BytesIO(rendered_bytes))
+        assert out_img.format == "WEBP"
+        assert out_img.size == (1080, 1080)
+
+

@@ -35,11 +35,17 @@ class Settings(BaseSettings):
     META_APP_ID: str = ""
     META_APP_SECRET: str = ""
     
+    # Gemini / Gemma
+    GEMINI_API_KEY: str = ""
+    GOOGLE_API_KEY: str = ""
+    GEMINI_MODEL: str = "gemma-4-31b-it"
+    
     # Cloudflare R2
     CLOUDFLARE_R2_ACCESS_KEY_ID: str = ""
     CLOUDFLARE_R2_SECRET_ACCESS_KEY: str = ""
     CLOUDFLARE_R2_ENDPOINT_URL: str = ""
     CLOUDFLARE_R2_BUCKET_NAME: str = ""
+    CLOUDFLARE_R2_PUBLIC_URL: str = ""
     
     # Security
     ENCRYPTION_KEY: str = "BIn4i0m5A7Y4xWJzD3z9r0KzL1e3N9v4M3b2A1V8c2Q=" # Fallback key for dev, should be 32 url-safe base64

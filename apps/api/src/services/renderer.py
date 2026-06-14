@@ -72,6 +72,40 @@ async def composite_text_on_background(
                 except Exception as e:
                     logger.error(f"Failed to open local background image: {e}")
                     
+        # [SOLID: DIP] — bypassed unauthenticated HTTP GET in favor of authenticated S3 client for R2 URLs
+        from core.config import get_settings
+        settings = get_settings()
+        is_r2_url = False
+        bucket_name = settings.CLOUDFLARE_R2_BUCKET_NAME
+        key = None
+        
+        if settings.CLOUDFLARE_R2_ENDPOINT_URL:
+            endpoint = settings.CLOUDFLARE_R2_ENDPOINT_URL.rstrip("/")
+            if background_url.startswith(endpoint):
+                is_r2_url = True
+                rel_path = background_url[len(endpoint):].lstrip("/")
+                path_parts = rel_path.split("/", 1)
+                if len(path_parts) == 2:
+                    bucket_name, key = path_parts
+                    
+        if not is_r2_url and settings.CLOUDFLARE_R2_PUBLIC_URL:
+            public_url = settings.CLOUDFLARE_R2_PUBLIC_URL.rstrip("/")
+            if background_url.startswith(public_url):
+                is_r2_url = True
+                key = background_url[len(public_url):].lstrip("/")
+                
+        if img is None and is_r2_url and key:
+            try:
+                logger.info(f"Downloading background template directly from S3/R2. Bucket: {bucket_name}, Key: {key}")
+                from services.storage import get_s3_client
+                s3_client = get_s3_client(settings)
+                if s3_client:
+                    resp = s3_client.get_object(Bucket=bucket_name, Key=key)
+                    img = Image.open(io.BytesIO(resp['Body'].read()))
+                    img.load()
+            except Exception as e:
+                logger.error(f"Failed to load background template from R2 directly: {e}")
+                    
         if img is None:
             # Download remote image
             try:
