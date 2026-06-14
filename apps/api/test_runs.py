@@ -9,4 +9,5 @@ async def main():
         for r in res.scalars().all():
             print(f"ID: {r.id}, Status: {r.status}, Error: {r.error_message}")
 
-asyncio.run(main())
+if __name__ == "__main__":
+    asyncio.run(main())

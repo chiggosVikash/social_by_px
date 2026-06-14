@@ -22,6 +22,13 @@ async def upload_file(file_data: bytes, file_name: str, content_type: str = "ima
     client = get_s3_client(settings)
     if not client:
         # For local development without R2 configured
+        import os
+        # Path to static folder in apps/api/static
+        static_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "static"))
+        target_path = os.path.join(static_dir, file_name)
+        os.makedirs(os.path.dirname(target_path), exist_ok=True)
+        with open(target_path, "wb") as f:
+            f.write(file_data)
         return f"http://localhost:8000/static/{file_name}"
         
     bucket = settings.CLOUDFLARE_R2_BUCKET_NAME

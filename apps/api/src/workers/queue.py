@@ -30,3 +30,9 @@ def enqueue_image_generation(article_id: int):
     from workers.tasks import run_image_generation_task
     job = workflow_queue.enqueue(run_image_generation_task, article_id, job_timeout=700)
     return job.id
+
+def enqueue_project_rerender(project_id: int):
+    """Enqueues a background task to (re-)render pending slides for a project."""
+    from workers.tasks import run_project_rerender_task
+    job = workflow_queue.enqueue(run_project_rerender_task, project_id)
+    return job.id

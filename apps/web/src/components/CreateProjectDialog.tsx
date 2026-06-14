@@ -16,6 +16,7 @@ export function CreateProjectDialog({ children }: CreateProjectDialogProps) {
   const [name, setName] = useState("");
   const [industry, setIndustry] = useState("");
   const [keywords, setKeywords] = useState("");
+  const [avoidImageGeneration, setAvoidImageGeneration] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   
   const createProject = useProjectStore((state) => state.createProject);
@@ -35,12 +36,14 @@ export function CreateProjectDialog({ children }: CreateProjectDialogProps) {
         name: name.trim(),
         industry: industry.trim(),
         keywords: keywordList,
+        avoid_image_generation: avoidImageGeneration,
       });
       
       // Reset and close
       setName("");
       setIndustry("");
       setKeywords("");
+      setAvoidImageGeneration(false);
       setOpen(false);
     } catch (error) {
       console.error("Failed to create project", error);
@@ -96,6 +99,21 @@ export function CreateProjectDialog({ children }: CreateProjectDialogProps) {
               className="col-span-3"
               placeholder="e.g. AI, Machine Learning, Tech"
             />
+          </div>
+          <div className="grid grid-cols-4 items-center gap-4">
+            <Label htmlFor="avoidImageGeneration" className="text-right text-xs leading-tight">
+              Avoid AI Images
+            </Label>
+            <div className="col-span-3 flex items-center gap-2">
+              <input
+                type="checkbox"
+                id="avoidImageGeneration"
+                checked={avoidImageGeneration}
+                onChange={(e) => setAvoidImageGeneration(e.target.checked)}
+                className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary cursor-pointer"
+              />
+              <span className="text-xs text-muted-foreground">Skip DALL-E, upload your own background template instead.</span>
+            </div>
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setOpen(false)}>

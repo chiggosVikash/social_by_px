@@ -6,6 +6,8 @@ export interface Project {
   id: number;
   name: string;
   industry: string;
+  avoid_image_generation: boolean;
+  background_image_url: string | null;
 }
 
 export interface ProjectState {
@@ -16,7 +18,8 @@ export interface ProjectState {
 
 export interface ProjectActions {
   fetchProjects: () => Promise<void>;
-  createProject: (data: { name: string; industry: string; keywords: string[] }) => Promise<void>;
+  createProject: (data: { name: string; industry: string; keywords: string[]; avoid_image_generation: boolean }) => Promise<void>;
+  updateProjectSettings: (projectId: number, data: { name?: string; industry?: string; avoid_image_generation?: boolean }) => Promise<void>;
   runWorkflow: (projectId: number) => Promise<void>;
   fetchProjectStatus: (projectId: number) => Promise<string>;
 }
@@ -40,12 +43,22 @@ export const useProjectStore = create<ProjectStore>()(
     createProject: async (data) => {
       set({ isLoading: true, error: null });
       try {
-        const response = await apiClient.post<Project>('/projects', data);
-        // Refresh the list immediately
+        await apiClient.post<Project>('/projects', data);
         await get().fetchProjects();
       } catch (err: any) {
         console.error("Failed to create project", err);
         set({ error: 'Failed to create project', isLoading: false });
+        throw err;
+      }
+    },
+    updateProjectSettings: async (projectId, data) => {
+      set({ isLoading: true, error: null });
+      try {
+        await apiClient.put<Project>(`/projects/${projectId}`, data);
+        await get().fetchProjects();
+      } catch (err: any) {
+        console.error("Failed to update project settings", err);
+        set({ error: 'Failed to update project settings', isLoading: false });
         throw err;
       }
     },

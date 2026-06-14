@@ -20,6 +20,7 @@ import {
 import { CreateProjectDialog } from "@/components/CreateProjectDialog";
 import { toast } from "sonner";
 import { PreviewModal } from "@/components/PreviewModal";
+import { ProjectSettingsDialog } from "@/components/ProjectSettingsDialog";
 
 import { Progress } from "@/components/ui/progress";
 
@@ -42,6 +43,7 @@ function ProjectCard({ project }: { project: Project }) {
   const [isFailed, setIsFailed] = useState<boolean>(false);
   const [shouldConnect, setShouldConnect] = useState(false);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const fetchProjectStatus = useProjectStore((state) => state.fetchProjectStatus);
   const runWorkflow = useProjectStore((state) => state.runWorkflow);
 
@@ -165,9 +167,11 @@ function ProjectCard({ project }: { project: Project }) {
             <span className="sr-only">Open menu</span>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-[160px]">
-            <DropdownMenuItem render={<Link href={`/projects/${project.id}/settings`} className="cursor-pointer flex items-center w-full" />}>
-              <Settings className="mr-2 h-4 w-4" />
-              Settings
+            <DropdownMenuItem onClick={() => setIsSettingsOpen(true)} className="cursor-pointer">
+              <div className="flex items-center w-full">
+                <Settings className="mr-2 h-4 w-4" />
+                Settings
+              </div>
             </DropdownMenuItem>
             
             <DropdownMenuItem onClick={() => setIsPreviewOpen(true)} className="cursor-pointer">
@@ -235,6 +239,7 @@ function ProjectCard({ project }: { project: Project }) {
         </div>
       </CardContent>
       <PreviewModal projectId={project.id} open={isPreviewOpen} onOpenChange={setIsPreviewOpen} />
+      <ProjectSettingsDialog project={project} open={isSettingsOpen} onOpenChange={setIsSettingsOpen} />
     </Card>
   );
 }

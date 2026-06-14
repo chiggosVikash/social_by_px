@@ -18,7 +18,7 @@ from agents.graph import app_graph
 from agents.state import GraphState
 from agents.nodes import content_generation_agent, slide_verification_agent
 from services.storage import upload_file
-from services.image import get_image_generation_service, ImageOptimizationService
+from services.image import SlideImageStrategyFactory
 
 logger = logging.getLogger(__name__)
 
@@ -167,6 +167,18 @@ async def _run_workflow_async(run_id: int):
             await article_repo.save_workflow_results(db, project_id, final_state)
             logger.info(f"Persisted articles and slides to database for project {project_id}.")
             
+            # [SOLID: SRP] Auto-render slide templates if user chose to avoid AI image generation
+            if project.avoid_image_generation and project.background_image_url:
+                result = await db.execute(
+                    select(Article)
+                    .options(selectinload(Article.slides))
+                    .where(Article.project_id == project_id, Article.status == "pending")
+                )
+                pending_articles = result.scalars().all()
+                for article in pending_articles:
+                    if any(s.image_url is None for s in article.slides):
+                        await _render_slides_for_article(db, article, project)
+            
             workflow_run.status = "Completed"
             await db.commit()
             await notifier.publish("Completed")
@@ -263,6 +275,30 @@ async def _run_article_regeneration_async(article_id: int):
             await notifier.publish("Failed", is_failed=True)
 
 
+async def _render_slides_for_article(db, article, project) -> None:
+    """Helper to render text onto background template for all slides of an article."""
+    if not project.background_image_url:
+        logger.warning(f"No background image URL set for project {project.id}, skipping render.")
+        return
+
+    strategy = SlideImageStrategyFactory.get_strategy(project)
+    slides_to_process = sorted(list(article.slides), key=lambda s: s.order_index)
+    total_slides = len(slides_to_process)
+
+    for idx, slide in enumerate(slides_to_process):
+        logger.info(f"Rendering slide {idx+1}/{total_slides} for article {article.id} using strategy {strategy.__class__.__name__}")
+        try:
+            url = await strategy.generate_and_save(db, slide, article, project, idx, total_slides)
+            if url:
+                slide.image_url = url
+        except Exception as e:
+            logger.error(f"Failed to generate/save slide image for slide {slide.id}: {e}")
+            raise e
+    
+    article.status = "pending"
+    await db.commit()
+
+
 def run_image_generation_task(article_id: int):
     """Generates images using DALL-E 3 for the slides of a specific article."""
     asyncio.run(_run_image_generation_async(article_id))
@@ -283,36 +319,38 @@ async def _run_image_generation_async(article_id: int):
         project_id = cast(int, article.project_id)
         notifier = ProgressNotifier(redis_client, project_id)
         
+        project = article.project
+        if not project:
+            logger.error(f"Project not found for article {article_id}")
+            return
+
+        if project.avoid_image_generation and not project.background_image_url:
+            raise ValueError("Project background image is not uploaded yet.")
+
         try:
-            logger.info(f"Starting image generation for article {article_id} with {len(article.slides)} slides.")
-            await notifier.publish("Generating slide background images...")
+            logger.info(f"Starting slide image generation for article {article_id} (Avoid AI: {project.avoid_image_generation})")
             
+            # [PATTERN: Strategy] - Using strategy resolved from SlideImageStrategyFactory
+            strategy = SlideImageStrategyFactory.get_strategy(project)
+            
+            if project.avoid_image_generation:
+                await notifier.publish("Rendering slide text onto background template...")
+            else:
+                await notifier.publish("Generating slide background images...")
+
             slides_to_process = sorted(list(article.slides), key=lambda s: s.order_index)
+            total_slides = len(slides_to_process)
             
             for idx, slide in enumerate(slides_to_process):
-                logger.info(f"Processing slide {idx+1}/{len(slides_to_process)} (ID: {slide.id})")
-                await notifier.publish(f"Generating image for slide {idx+1}/{len(slides_to_process)}...")
+                logger.info(f"Processing slide {idx+1}/{total_slides} (ID: {slide.id}) using strategy {strategy.__class__.__name__}")
+                await notifier.publish(f"Generating image for slide {idx+1}/{total_slides}...")
                 
-                prompt_source = slide.caption or slide.text_content or article.title
-                image_prompt = f"Abstract background for a social media slide. Minimalist, modern, beautiful, subtle. Theme: {prompt_source[:500]}"
-                image_prompt = image_prompt[:950]
-                
-                image_service = get_image_generation_service()
-                raw_image_bytes = await image_service.generate(image_prompt)
-                
-                if raw_image_bytes:
-                    logger.info("Successfully generated image. Optimizing...")
-                    optimized_bytes = ImageOptimizationService.optimize_for_web(raw_image_bytes, quality=80)
-
-                    file_name = f"slides/article_{article.id}_slide_{idx}_{uuid.uuid4().hex[:8]}.webp"
-                    logger.info(f"Uploading optimized image to R2 as {file_name}")
-                    permanent_url = await upload_file(optimized_bytes, file_name, content_type="image/webp")
-                    
-                    slide.image_url = permanent_url
-                    logger.info(f"Committing db transaction for slide {slide.id} with url {slide.image_url}")
+                url = await strategy.generate_and_save(db, slide, article, project, idx, total_slides)
+                if url:
+                    slide.image_url = url
                     await db.commit()
                 else:
-                    logger.warning(f"No response data from OpenAI for slide {slide.id}")
+                    logger.warning(f"No image URL returned for slide {slide.id}")
             
             logger.info(f"Finished processing all slides for article {article_id}")
             article.status = "pending"
@@ -326,3 +364,36 @@ async def _run_image_generation_async(article_id: int):
                 await db.commit()
             await notifier.publish(f"Failed: {str(e)}", is_failed=True)
             raise e
+
+
+def run_project_rerender_task(project_id: int):
+    """Re-renders all pending slides of a project when the project background changes."""
+    asyncio.run(_run_project_rerender_async(project_id))
+
+
+async def _run_project_rerender_async(project_id: int):
+    async with worker_context() as (db, redis_client, _):
+        result = await db.execute(
+            select(Project)
+            .where(Project.id == project_id)
+        )
+        project = result.scalar_one_or_none()
+        if not project or not project.background_image_url:
+            logger.error(f"Project {project_id} not found or missing background image.")
+            return
+
+        # Fetch all pending articles for this project
+        articles_result = await db.execute(
+            select(Article)
+            .options(selectinload(Article.slides))
+            .where(Article.project_id == project_id, Article.status == "pending")
+        )
+        articles = articles_result.scalars().all()
+        
+        notifier = ProgressNotifier(redis_client, project_id)
+        await notifier.publish("Regenerating slide images with new background template...")
+        
+        for article in articles:
+            await _render_slides_for_article(db, article, project)
+            
+        await notifier.publish("Completed")

@@ -21,6 +21,8 @@ class ApprovalItemOut(BaseModel):
     project_name: str
     article_title: str
     slides: List[SlideOut]
+    avoid_image_generation: bool = False
+    background_image_url: str | None = None
 
 @router.get("/pending", response_model=List[ApprovalItemOut])
 async def get_pending_approvals(
@@ -51,7 +53,9 @@ async def get_pending_approvals(
             project_id=article.project_id, # type: ignore
             project_name=article.project.name if article.project else "Unknown Project",
             article_title=article.title,
-            slides=slides_out
+            slides=slides_out,
+            avoid_image_generation=article.project.avoid_image_generation if article.project else False,
+            background_image_url=article.project.background_image_url if article.project else None
         ))
         
     return items

@@ -16,6 +16,8 @@ export interface ApprovalItem {
   project_name: string;
   article_title: string;
   slides: SlideOut[];
+  avoid_image_generation?: boolean;
+  background_image_url?: string | null;
 }
 
 export function useApprovals() {

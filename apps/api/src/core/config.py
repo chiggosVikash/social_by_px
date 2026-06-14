@@ -45,6 +45,10 @@ class Settings(BaseSettings):
     ENCRYPTION_KEY: str = "BIn4i0m5A7Y4xWJzD3z9r0KzL1e3N9v4M3b2A1V8c2Q=" # Fallback key for dev, should be 32 url-safe base64
     FRONTEND_URL: str = "http://localhost:3000"
     FIREBASE_CREDENTIALS_PATH: str = "socialpx-admin.json"
+    
+    # Upload Settings
+    MAX_BACKGROUND_FILE_SIZE: int = 5 * 1024 * 1024  # 5MB
+    ALLOWED_IMAGE_TYPES: list[str] = ["image/jpeg", "image/png", "image/webp"]
 
     model_config = SettingsConfigDict(env_file=str(ENV_FILE), extra="ignore")
 

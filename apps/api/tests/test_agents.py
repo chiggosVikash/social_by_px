@@ -74,13 +74,15 @@ def test_content_generation_agent(initial_state):
 def test_slide_verification_agent(initial_state):
     initial_state["generated_slides"] = {
         "http://test1.com": [
-            {"text_content": "Valid short text", "image_prompt": "Img"},
-            {"text_content": "x" * 300, "image_prompt": "Too long text"}
+            {"text_content": "Valid short text 1", "image_prompt": "Img", "hook_type": "question"},
+            {"text_content": "Valid short text 2", "image_prompt": "Img", "hook_type": "statistic"},
+            {"text_content": "Valid short text 3", "image_prompt": "Img", "hook_type": "bold_claim"},
+            {"text_content": "x" * 300, "image_prompt": "Too long text", "hook_type": "cta"}
         ]
     }
     new_state = slide_verification_agent(initial_state)
-    assert len(new_state["approved_slides"]["http://test1.com"]) == 1
-    assert new_state["approved_slides"]["http://test1.com"][0]["text_content"] == "Valid short text"
+    assert len(new_state["approved_slides"]["http://test1.com"]) == 3
+    assert new_state["approved_slides"]["http://test1.com"][0]["text_content"] == "Valid short text 1"
 
 def test_publishing_agent(initial_state):
     new_state = publishing_agent(initial_state)

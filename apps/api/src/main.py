@@ -31,6 +31,14 @@ api_router.include_router(social_accounts.router)
 api_router.include_router(approvals.router)
 api_router.include_router(websockets.router, prefix="/ws")
 
+from fastapi.staticfiles import StaticFiles
+import os
+
+static_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "static"))
+if not os.path.exists(static_dir):
+    os.makedirs(static_dir)
+app.mount("/static", StaticFiles(directory=static_dir), name="static")
+
 app.include_router(api_router)
 
 @app.get("/health")

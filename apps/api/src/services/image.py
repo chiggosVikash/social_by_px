@@ -4,6 +4,7 @@ import logging
 from typing import Optional
 from abc import ABC, abstractmethod
 from PIL import Image
+from sqlalchemy.ext.asyncio import AsyncSession
 from openai import AsyncOpenAI
 from core.config import get_settings
 
@@ -100,3 +101,89 @@ class ImageOptimizationService:
         img_byte_arr = io.BytesIO()
         image.save(img_byte_arr, format='WEBP', quality=quality)
         return img_byte_arr.getvalue()
+
+
+# [PATTERN: Strategy] - Strategy interface for slide image generation
+class SlideImageGenerationStrategy(ABC):
+    @abstractmethod
+    async def generate_and_save(
+        self,
+        db: AsyncSession,
+        slide,
+        article,
+        project,
+        idx: int,
+        total: int
+    ) -> Optional[str]:
+        """Generate a slide image, upload it to storage, and return the permanent URL."""
+        pass
+
+
+# [SOLID: OCP] - Concrete Strategy for AI DALL-E Image Generation
+class DalleSlideImageStrategy(SlideImageGenerationStrategy):
+    async def generate_and_save(
+        self,
+        db: AsyncSession,
+        slide,
+        article,
+        project,
+        idx: int,
+        total: int
+    ) -> Optional[str]:
+        import uuid
+        from services.storage import upload_file
+        
+        prompt_source = slide.caption or slide.text_content or article.title
+        image_prompt = f"Abstract background for a social media slide. Minimalist, modern, beautiful, subtle. Theme: {prompt_source[:500]}"
+        image_prompt = image_prompt[:950]
+        
+        image_service = get_image_generation_service()
+        raw_image_bytes = await image_service.generate(image_prompt)
+        
+        if not raw_image_bytes:
+            return None
+            
+        optimized_bytes = ImageOptimizationService.optimize_for_web(raw_image_bytes, quality=80)
+        file_name = f"slides/article_{article.id}_slide_{idx}_{uuid.uuid4().hex[:8]}.webp"
+        
+        return await upload_file(optimized_bytes, file_name, content_type="image/webp")
+
+
+# [SOLID: OCP] - Concrete Strategy for Local PIL Text Compositing
+class TemplateCompositingSlideImageStrategy(SlideImageGenerationStrategy):
+    async def generate_and_save(
+        self,
+        db: AsyncSession,
+        slide,
+        article,
+        project,
+        idx: int,
+        total: int
+    ) -> Optional[str]:
+        import uuid
+        from services.renderer import composite_text_on_background
+        from services.storage import upload_file
+        
+        if not project.background_image_url:
+            raise ValueError("No background image template uploaded for project.")
+            
+        rendered_bytes = await composite_text_on_background(
+            text_content=slide.text_content or "",
+            emoji=slide.emoji,
+            caption=slide.caption,
+            background_url=project.background_image_url,
+            slide_index=idx,
+            total_slides=total
+        )
+        
+        file_name = f"slides/article_{article.id}_slide_{idx}_{uuid.uuid4().hex[:8]}.webp"
+        return await upload_file(rendered_bytes, file_name, content_type="image/webp")
+
+
+# [PATTERN: Factory] - Factory to resolve slide image generation strategy
+class SlideImageStrategyFactory:
+    @staticmethod
+    def get_strategy(project) -> SlideImageGenerationStrategy:
+        if project.avoid_image_generation:
+            return TemplateCompositingSlideImageStrategy()
+        return DalleSlideImageStrategy()

@@ -15,6 +15,8 @@ class ProjectKeywordResponse(ProjectKeywordBase):
 class ProjectBase(BaseModel):
     name: str
     industry: Optional[str] = None
+    avoid_image_generation: bool = False
+    background_image_url: Optional[str] = None
 
 class ProjectCreate(ProjectBase):
     keywords: List[str] = []
@@ -22,6 +24,8 @@ class ProjectCreate(ProjectBase):
 class ProjectUpdate(BaseModel):
     name: Optional[str] = None
     industry: Optional[str] = None
+    avoid_image_generation: Optional[bool] = None
+    background_image_url: Optional[str] = None
 
 class ProjectResponse(ProjectBase):
     id: int

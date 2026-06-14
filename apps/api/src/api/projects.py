@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, File, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List
 
@@ -98,4 +98,80 @@ async def get_project_preview(project_id: int, db: AsyncSession = Depends(get_db
             ]
         })
     return {"articles": preview_data}
+
+
+@router.put("/{project_id}", response_model=ProjectResponse)
+async def update_project(
+    project_id: int,
+    project_in: ProjectUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user_id: int = Depends(get_current_user_id)
+):
+    project = await project_repo.get_with_keywords(db=db, id=project_id, owner_id=current_user_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+        
+    if project_in.name is not None:
+        project.name = project_in.name
+    if project_in.industry is not None:
+        project.industry = project_in.industry
+    if project_in.avoid_image_generation is not None:
+        project.avoid_image_generation = project_in.avoid_image_generation
+    if project_in.background_image_url is not None:
+        project.background_image_url = project_in.background_image_url
+        
+    await db.commit()
+    await db.refresh(project)
+    return project
+
+
+@router.post("/{project_id}/background", response_model=ProjectResponse)
+async def upload_project_background(
+    project_id: int,
+    file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+    current_user_id: int = Depends(get_current_user_id)
+):
+    project = await project_repo.get_with_keywords(db=db, id=project_id, owner_id=current_user_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+        
+    from core.config import get_settings
+    settings = get_settings()
+    
+    # Validate file size (max 5MB)
+    file.file.seek(0, 2)
+    file_size = file.file.tell()
+    file.file.seek(0)
+    if file_size > settings.MAX_BACKGROUND_FILE_SIZE:
+        raise HTTPException(status_code=400, detail="File too large. Max size is 5MB.")
+        
+    # Validate format
+    if file.content_type not in settings.ALLOWED_IMAGE_TYPES:
+        raise HTTPException(status_code=400, detail="Invalid file type. Allowed: JPEG, PNG, WebP.")
+        
+    # Read file content
+    file_data = await file.read()
+    
+    # Generate file name and upload
+    import uuid
+    ext = file.filename.split(".")[-1] if file.filename and "." in file.filename else "webp"
+    file_name = f"projects/project_{project_id}_background_{uuid.uuid4().hex[:8]}.{ext}"
+    
+    from services.storage import upload_file
+    bg_url = await upload_file(file_data, file_name, content_type=file.content_type or "image/webp")
+    
+    project.background_image_url = bg_url
+    await db.commit()
+    await db.refresh(project)
+    
+    # Trigger background rendering if avoid_image_generation is True
+    if project.avoid_image_generation:
+        try:
+            from workers.queue import enqueue_project_rerender
+            enqueue_project_rerender(project.id)
+        except ImportError:
+            pass
+            
+    return project
 

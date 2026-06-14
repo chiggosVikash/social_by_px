@@ -11,7 +11,9 @@ class CRUDProject(CRUDBase[Project, ProjectCreate]):
         db_project = Project(
             name=obj_in.name,
             industry=obj_in.industry,
-            owner_id=owner_id
+            owner_id=owner_id,
+            avoid_image_generation=obj_in.avoid_image_generation,
+            background_image_url=obj_in.background_image_url
         )
         db.add(db_project)
         await db.flush()
