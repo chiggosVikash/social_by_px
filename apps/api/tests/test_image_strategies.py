@@ -1,3 +1,4 @@
+import base64
 import pytest
 from unittest.mock import patch, MagicMock, AsyncMock, ANY
 from services.image import (
@@ -138,3 +139,94 @@ async def test_template_compositing_missing_background_error(mock_db, mock_slide
             idx=0,
             total=5
         )
+
+
+from services.image import (
+    GptImage1MiniStrategy,
+    get_image_generation_service,
+)
+
+
+@pytest.fixture
+def mock_gpt_image_response():
+    """Build a mock response that mimics openai.types.images_response.ImageResponse."""
+    mock_data_item = MagicMock()
+    mock_data_item.b64_json = base64.b64encode(b"fake_png_bytes").decode()
+
+    mock_response = MagicMock()
+    mock_response.data = [mock_data_item]
+    return mock_response
+
+
+@pytest.mark.asyncio
+@patch("services.image.AsyncOpenAI")
+async def test_gpt_image_1_mini_strategy_happy_path(mock_openai_cls, mock_gpt_image_response):
+    mock_client = AsyncMock()
+    mock_client.images.generate = AsyncMock(return_value=mock_gpt_image_response)
+    mock_openai_cls.return_value = mock_client
+
+    strategy = GptImage1MiniStrategy()
+    result = await strategy.generate_image("a blue gradient background")
+
+    assert result == b"fake_png_bytes"
+    mock_client.images.generate.assert_called_once_with(
+        model="gpt-image-1-mini",
+        prompt="a blue gradient background",
+        size="1024x1024",
+        quality="medium",
+        n=1,
+        response_format="b64_json",
+    )
+
+
+@pytest.mark.asyncio
+@patch("services.image.AsyncOpenAI")
+async def test_gpt_image_1_mini_strategy_api_error(mock_openai_cls):
+    mock_client = AsyncMock()
+    mock_client.images.generate = AsyncMock(side_effect=RuntimeError("API down"))
+    mock_openai_cls.return_value = mock_client
+
+    strategy = GptImage1MiniStrategy()
+    result = await strategy.generate_image("any prompt")
+
+    assert result is None
+
+
+@pytest.mark.asyncio
+@patch("services.image.AsyncOpenAI")
+async def test_gpt_image_1_mini_strategy_empty_data(mock_openai_cls):
+    mock_response = MagicMock()
+    mock_response.data = []
+
+    mock_client = AsyncMock()
+    mock_client.images.generate = AsyncMock(return_value=mock_response)
+    mock_openai_cls.return_value = mock_client
+
+    strategy = GptImage1MiniStrategy()
+    result = await strategy.generate_image("any prompt")
+
+    assert result is None
+
+
+@pytest.mark.asyncio
+@patch("services.image.AsyncOpenAI")
+async def test_gpt_image_1_mini_strategy_missing_b64_json(mock_openai_cls):
+    mock_data_item = MagicMock()
+    mock_data_item.b64_json = None
+
+    mock_response = MagicMock()
+    mock_response.data = [mock_data_item]
+
+    mock_client = AsyncMock()
+    mock_client.images.generate = AsyncMock(return_value=mock_response)
+    mock_openai_cls.return_value = mock_client
+
+    strategy = GptImage1MiniStrategy()
+    result = await strategy.generate_image("any prompt")
+
+    assert result is None
+
+
+def test_factory_returns_gpt_image_1_mini_strategy():
+    service = get_image_generation_service()
+    assert type(service._strategy).__name__ == "GptImage1MiniStrategy"
