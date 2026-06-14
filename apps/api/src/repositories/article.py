@@ -12,7 +12,14 @@ class ArticleRepository:
         to the database.
         """
         for art_data in final_state.get("approved_articles", []):
-            result = await db.execute(select(Article).where(Article.url == art_data["url"]))
+            # [SOLID: SRP] Check uniqueness scoped to project_id to allow identical URLs in different projects
+            result = await db.execute(
+                select(Article)
+                .where(
+                    Article.project_id == project_id,
+                    Article.url == art_data["url"]
+                )
+            )
             existing_article = result.scalar_one_or_none()
             
             if not existing_article:

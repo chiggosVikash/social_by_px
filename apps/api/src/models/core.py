@@ -1,4 +1,4 @@
-from sqlalchemy import Integer, String, Boolean, ForeignKey, DateTime, Float, JSON, Text, func
+from sqlalchemy import Integer, String, Boolean, ForeignKey, DateTime, Float, JSON, Text, func, UniqueConstraint
 from sqlalchemy.orm import relationship, Mapped, mapped_column
 from typing import List, Optional
 from datetime import datetime
@@ -63,10 +63,15 @@ class SocialAccount(Base):
 
 class Article(Base):
     __tablename__ = "articles"
+    # [SOLID: SRP] — Scoping unique constraint to (project_id, url) to allow same article in multiple projects
+    __table_args__ = (
+        UniqueConstraint("project_id", "url", name="uq_article_project_url"),
+    )
+    
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     project_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("projects.id"))
     title: Mapped[str] = mapped_column(String, nullable=False)
-    url: Mapped[str] = mapped_column(String, unique=True, nullable=False)
+    url: Mapped[str] = mapped_column(String, nullable=False)
     source: Mapped[Optional[str]] = mapped_column(String)
     published_date: Mapped[Optional[datetime]] = mapped_column(DateTime)
     summary: Mapped[Optional[str]] = mapped_column(Text)
