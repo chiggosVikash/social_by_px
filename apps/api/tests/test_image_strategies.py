@@ -230,3 +230,20 @@ async def test_gpt_image_1_mini_strategy_missing_b64_json(mock_openai_cls):
 def test_factory_returns_gpt_image_1_mini_strategy():
     service = get_image_generation_service()
     assert type(service._strategy).__name__ == "GptImage1MiniStrategy"
+
+
+@pytest.mark.asyncio
+async def test_gpt_image_1_mini_full_path_live():
+    """Optional: live API test. Only runs when OPENAI_API_KEY is set and LIVE_API_TESTS=1."""
+    import os
+    if not os.environ.get("OPENAI_API_KEY") or os.environ.get("LIVE_API_TESTS") != "1":
+        pytest.skip("Live API test skipped — set OPENAI_API_KEY and LIVE_API_TESTS=1 to run")
+
+    strategy = GptImage1MiniStrategy()
+    result = await strategy.generate_image(
+        "Soft, even lighting. No text, no people, no objects. "
+        "Clean gradient or abstract pattern. Suitable for white text overlay. "
+        "Modern editorial style. Theme: artificial intelligence"
+    )
+    assert result is not None
+    assert len(result) > 1000  # should be a real image
