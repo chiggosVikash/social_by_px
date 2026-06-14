@@ -91,6 +91,7 @@ class Slide(Base):
     text_content: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     caption: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     emoji: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)
-    
+    image_model: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+
     article: Mapped["Article"] = relationship("Article", back_populates="slides")
 
