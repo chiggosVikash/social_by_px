@@ -182,7 +182,11 @@ class DalleSlideImageStrategy(SlideImageGenerationStrategy):
         from services.storage import upload_file
         
         prompt_source = slide.caption or slide.text_content or article.title
-        image_prompt = f"Abstract background for a social media slide. Minimalist, modern, beautiful, subtle. Theme: {prompt_source[:500]}"
+        image_prompt = (
+            f"Soft, even lighting. No text, no people, no objects. "
+            f"Clean gradient or abstract pattern. Suitable for white text overlay. "
+            f"Modern editorial style. Theme: {prompt_source[:500]}"
+        )
         image_prompt = image_prompt[:950]
         
         image_service = get_image_generation_service()
