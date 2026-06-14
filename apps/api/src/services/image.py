@@ -55,6 +55,53 @@ class OpenAIImageStrategy(ImageGenerationStrategy):
         return base64.b64decode(image_base64)
 
 
+# [SOLID: OCP] - Concrete Strategy for OpenAI gpt-image-1-mini (cost-efficient)
+class GptImage1MiniStrategy(ImageGenerationStrategy):
+    """Cost-efficient image generation using OpenAI's gpt-image-1-mini model.
+
+    Uses the Images API (not the Responses API) for direct per-image pricing.
+    Default: medium quality at 1024x1024 (~$0.011/image).
+    """
+
+    MODEL_NAME = "gpt-image-1-mini"
+    DEFAULT_QUALITY = "medium"
+    DEFAULT_SIZE = "1024x1024"
+
+    async def generate_image(self, prompt: str) -> Optional[bytes]:
+        settings = get_settings()
+        if not settings.OPENAI_API_KEY:
+            raise RuntimeError("OPENAI_API_KEY is not set.")
+
+        client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
+
+        try:
+            logger.info(
+                f"Calling OpenAI Images API with model {self.MODEL_NAME} "
+                f"quality={self.DEFAULT_QUALITY} size={self.DEFAULT_SIZE}"
+            )
+            response = await client.images.generate(
+                model=self.MODEL_NAME,
+                prompt=prompt,
+                size=self.DEFAULT_SIZE,
+                quality=self.DEFAULT_QUALITY,
+                n=1,
+                response_format="b64_json",
+            )
+        except Exception as api_e:
+            logger.error(f"gpt-image-1-mini call failed: {api_e}")
+            return None
+
+        if not response or not response.data:
+            return None
+
+        b64 = getattr(response.data[0], "b64_json", None)
+        if not b64:
+            logger.warning("gpt-image-1-mini returned no b64_json in response")
+            return None
+
+        return base64.b64decode(b64)
+
+
 # [SOLID: OCP] - Example placeholder for future OpenRouter Strategy
 class OpenRouterImageStrategy(ImageGenerationStrategy):
     async def generate_image(self, prompt: str) -> Optional[bytes]:
@@ -78,10 +125,11 @@ class ImageGenerationService:
 # [PATTERN: Factory] - Centralized instantiation
 def get_image_generation_service() -> ImageGenerationService:
     """
-    Factory to resolve the correct strategy. 
-    In the future, you can read from `get_settings().IMAGE_PROVIDER` to choose between OpenAI, OpenRouter, etc.
+    Factory to resolve the correct strategy.
+    Currently uses gpt-image-1-mini via the Images API for cost efficiency.
+    In the future, you can read from `get_settings().IMAGE_PROVIDER` to choose between models.
     """
-    strategy = OpenAIImageStrategy()
+    strategy = GptImage1MiniStrategy()
     return ImageGenerationService(strategy)
 
 
