@@ -24,6 +24,12 @@ class Project(Base):
     owner_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("users.id"))
     avoid_image_generation: Mapped[bool] = mapped_column(Boolean, default=False)
     background_image_url: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    style_preset: Mapped[Optional[str]] = mapped_column(
+        String(32),
+        nullable=True,
+        server_default="general_soft",
+        index=True,
+    )
     created_at: Mapped[Optional[datetime]] = mapped_column(DateTime, default=func.now())
     
     owner: Mapped["User"] = relationship("User", back_populates="projects")
@@ -91,6 +97,16 @@ class Slide(Base):
     text_content: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     caption: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     emoji: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)
-    
+    text_zone: Mapped[Optional[str]] = mapped_column(
+        String(32),
+        nullable=True,
+        server_default="center-bottom third",
+    )
+    visual_type: Mapped[Optional[str]] = mapped_column(
+        String(16),
+        nullable=True,
+        server_default="minimalist",
+    )
+
     article: Mapped["Article"] = relationship("Article", back_populates="slides")
 
