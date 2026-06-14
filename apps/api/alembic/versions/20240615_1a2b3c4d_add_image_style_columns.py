@@ -18,23 +18,23 @@ depends_on = None
 
 def upgrade() -> None:
     # Add style_preset to Project table (nullable, default 'general_soft')
-    op.add_column('project',
+    op.add_column('projects',
         sa.Column('style_preset', sa.String(32), nullable=True,
                  server_default='general_soft')
     )
 
     # Add text_zone and visual_type to Slide table (nullable, default values)
-    op.add_column('slide',
+    op.add_column('slides',
         sa.Column('text_zone', sa.String(32), nullable=True,
                  server_default='center-bottom third')
     )
-    op.add_column('slide',
+    op.add_column('slides',
         sa.Column('visual_type', sa.String(16), nullable=True,
                  server_default='minimalist')
     )
 
 
 def downgrade() -> None:
-    op.drop_column('slide', 'visual_type')
-    op.drop_column('slide', 'text_zone')
-    op.drop_column('project', 'style_preset')
+    op.drop_column('slides', 'visual_type')
+    op.drop_column('slides', 'text_zone')
+    op.drop_column('projects', 'style_preset')
