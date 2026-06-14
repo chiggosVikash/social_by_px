@@ -91,6 +91,9 @@ class Slide(Base):
     text_content: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     caption: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     emoji: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)
+    # [YAGNI-EXCEPTION: reserved for future per-slide model selection]
+    # Currently not written by any code path; will be set when the approval
+    # UI exposes a model dropdown. Nullable + additive so no backfill needed.
     image_model: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
 
     article: Mapped["Article"] = relationship("Article", back_populates="slides")

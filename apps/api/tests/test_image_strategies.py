@@ -5,7 +5,9 @@ from services.image import (
     SlideImageStrategyFactory,
     DalleSlideImageStrategy,
     TemplateCompositingSlideImageStrategy,
-    ImageOptimizationService
+    ImageOptimizationService,
+    GptImage1MiniStrategy,
+    get_image_generation_service,
 )
 
 class DummyModel:
@@ -141,10 +143,6 @@ async def test_template_compositing_missing_background_error(mock_db, mock_slide
         )
 
 
-from services.image import (
-    GptImage1MiniStrategy,
-    get_image_generation_service,
-)
 
 
 @pytest.fixture
@@ -229,7 +227,7 @@ async def test_gpt_image_1_mini_strategy_missing_b64_json(mock_openai_cls):
 
 def test_factory_returns_gpt_image_1_mini_strategy():
     service = get_image_generation_service()
-    assert type(service._strategy).__name__ == "GptImage1MiniStrategy"
+    assert isinstance(service._strategy, GptImage1MiniStrategy)
 
 
 @pytest.mark.asyncio
