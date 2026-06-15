@@ -8,6 +8,8 @@ export interface SlideOut {
   image_url: string | null;
   caption: string | null;
   emoji: string | null;
+  text_zone?: string | null;
+  visual_type?: string | null;
 }
 
 export interface ApprovalItem {

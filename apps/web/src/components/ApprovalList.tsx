@@ -9,7 +9,29 @@ import { Progress } from "@/components/ui/progress";
 import { toast } from "sonner";
 import { apiClient } from "@/lib/api-client";
 
-function ApprovalCard({ 
+const getVisualTypeBadge = (visualType?: string | null) => {
+  const labels: Record<string, string> = {
+    minimalist: "Gradient",
+    thematic: "Template",
+    generative: "AI Art",
+  };
+  const colors: Record<string, string> = {
+    minimalist: "bg-gray-100/90 text-gray-800",
+    thematic: "bg-blue-100/90 text-blue-800",
+    generative: "bg-purple-100/90 text-purple-800",
+  };
+
+  const label = (visualType && labels[visualType]) || "Gradient";
+  const color = (visualType && colors[visualType]) || colors.minimalist;
+
+  return (
+    <span className={`px-2 py-0.5 text-[10px] font-medium rounded-full ${color}`}>
+      {label}
+    </span>
+  );
+};
+
+function ApprovalCard({
   item, 
   handleApprove, 
   handleReject, 
@@ -235,6 +257,12 @@ function ApprovalCard({
                       <span className={`absolute top-2 left-2 text-xs font-mono px-2 rounded-full z-10 ${slide.image_url ? 'bg-black/60 text-white' : 'bg-background/80 text-muted-foreground'}`}>
                         Slide {idx + 1}
                       </span>
+
+                      {slide.visual_type && (
+                        <span className="absolute top-2 right-2 z-10">
+                          {getVisualTypeBadge(slide.visual_type)}
+                        </span>
+                      )}
                       
                       {showListDarkOverlay && <div className="absolute inset-0 bg-black/40 z-0"></div>}
 
