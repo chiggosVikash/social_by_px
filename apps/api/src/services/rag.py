@@ -161,7 +161,7 @@ def get_rag_service() -> RAGService:
     
     if settings.GEMINI_API_KEY:
         Settings.embed_model = GoogleGenAIEmbedding(
-            model_name="models/text-embedding-004",
+            model_name="models/gemini-embedding-001",
             api_key=settings.GEMINI_API_KEY
         )
     else:
