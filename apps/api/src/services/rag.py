@@ -56,6 +56,14 @@ class RAGService:
         if not self.client:
             return "Fallback context: Create professional, engaging content based on the provided keywords."
 
+        try:
+            if not self.client.collection_exists(TEMPLATE_COLLECTION):
+                self.seed_initial_templates()
+        except Exception as e:
+            logger.warning(f"Could not verify or seed template collection: {e}")
+
+        # Empty creator collection creation removed because VectorStoreIndex.from_documents([]) is a no-op and doesn't create the collection.
+
         query = f"Industry: {industry}. Keywords: {', '.join(keywords)}"
         context_parts = []
         
@@ -71,11 +79,13 @@ class RAGService:
 
         try:
             # 1. Retrieve structural templates using Hybrid Search
-            template_store = QdrantVectorStore(client=self.client, collection_name=TEMPLATE_COLLECTION, enable_hybrid=True)
-            template_index = VectorStoreIndex.from_vector_store(template_store)
-            # Fetch top 10 from hybrid search
-            template_retriever = template_index.as_retriever(similarity_top_k=10)
-            template_nodes = template_retriever.retrieve(query)
+            template_nodes = []
+            if self.client.collection_exists(TEMPLATE_COLLECTION):
+                template_store = QdrantVectorStore(client=self.client, collection_name=TEMPLATE_COLLECTION, enable_hybrid=True)
+                template_index = VectorStoreIndex.from_vector_store(template_store)
+                # Fetch top 10 from hybrid search
+                template_retriever = template_index.as_retriever(similarity_top_k=10)
+                template_nodes = template_retriever.retrieve(query)
             
             # Rerank to top 3
             if reranker and template_nodes:
@@ -89,17 +99,19 @@ class RAGService:
                     context_parts.append(f"- {node.text}")
 
             # 2. Retrieve Creator History (isolated by metadata)
-            creator_store = QdrantVectorStore(client=self.client, collection_name=CREATOR_COLLECTION, enable_hybrid=True)
-            creator_index = VectorStoreIndex.from_vector_store(creator_store)
-            
-            from llama_index.core.vector_stores import ExactMatchFilter, MetadataFilters
-            filters = MetadataFilters(
-                filters=[ExactMatchFilter(key="creator_id", value=creator_id)]
-            )
-            
-            # Fetch top 10 from hybrid search
-            creator_retriever = creator_index.as_retriever(similarity_top_k=10, filters=filters)
-            creator_nodes = creator_retriever.retrieve(query)
+            creator_nodes = []
+            if self.client.collection_exists(CREATOR_COLLECTION):
+                creator_store = QdrantVectorStore(client=self.client, collection_name=CREATOR_COLLECTION, enable_hybrid=True)
+                creator_index = VectorStoreIndex.from_vector_store(creator_store)
+                
+                from llama_index.core.vector_stores import ExactMatchFilter, MetadataFilters
+                filters = MetadataFilters(
+                    filters=[ExactMatchFilter(key="creator_id", value=creator_id)]
+                )
+                
+                # Fetch top 10 from hybrid search
+                creator_retriever = creator_index.as_retriever(similarity_top_k=10, filters=filters)
+                creator_nodes = creator_retriever.retrieve(query)
             
             # Rerank to top 3
             if reranker and creator_nodes:
@@ -164,8 +176,14 @@ def get_rag_service() -> RAGService:
             model_name="models/gemini-embedding-001",
             api_key=settings.GEMINI_API_KEY
         )
+    elif settings.OPENAI_API_KEY:
+        from llama_index.embeddings.openai import OpenAIEmbedding
+        Settings.embed_model = OpenAIEmbedding(
+            model="text-embedding-3-large",
+            api_key=settings.OPENAI_API_KEY
+        )
     else:
-        logger.warning("GEMINI_API_KEY not set. RAG capabilities will fail if invoked.")
+        logger.warning("Neither GEMINI_API_KEY nor OPENAI_API_KEY is set. RAG capabilities will fail if invoked.")
 
     client = None
     try:

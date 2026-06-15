@@ -31,7 +31,13 @@ class GraphState(TypedDict):
     creator_id: int
     keywords: List[str]
     industry: str
+    audience: str
+    tone: str
+    content_angle: str
+    platform: str
+    language: str
     rag_context: Optional[str]
+    slide_count: int
     
     # Research state
     search_queries: List[str]
@@ -40,6 +46,7 @@ class GraphState(TypedDict):
     
     # Verification state
     approved_articles: List[ArticleData]
+    rejection_reasons: List[str]
     
     # Generation state
     generated_slides: Dict[str, List[SlideData]] # url -> slides

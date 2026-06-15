@@ -6,6 +6,16 @@ from langchain_openai import ChatOpenAI
 from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
 from core.config import get_settings
 
+# ── Import all prompts from the prompt system ──
+from .prompts import (
+    build_generation_system_prompt,
+    build_generation_user_prompt,
+    build_refinement_system_prompt,
+    build_verification_prompt,
+    build_article_verification_prompt,
+    build_query_refinement_prompt,
+)
+
 logger = logging.getLogger(__name__)
 
 class ChatGeminiResponse:
@@ -95,11 +105,20 @@ class ChatGeminiGemma:
             logger.error(f"Gemini API call failed: {e}")
             raise RuntimeError(f"Gemini API call failed: {e}")
 
-# [PATTERN: Strategy] — Bypasses ChatOpenAI to use ChatGeminiGemma if API keys are set
+# [PATTERN: Strategy] — Chooses LLM provider based on configured API keys
 def get_llm(temperature: float = 0.7):
     settings = get_settings()
     
-    # If Gemini API Key is configured, use the custom Gemma API client
+    # 1. OpenRouter (highest priority if configured)
+    if getattr(settings, 'OPENROUTER_API_KEY', None):
+        return ChatOpenAI(
+            base_url="https://openrouter.ai/api/v1",
+            api_key=settings.OPENROUTER_API_KEY,
+            model=getattr(settings, 'OPENROUTER_MODEL', "meta-llama/llama-3-70b-instruct"),
+            temperature=temperature
+        )
+
+    # 2. Gemini API Key
     api_key = settings.GEMINI_API_KEY
     if api_key:
         model = settings.GEMINI_MODEL or "gemma-4-31b-it"
@@ -109,7 +128,7 @@ def get_llm(temperature: float = 0.7):
             temperature=temperature
         )
         
-    # Fallback to OpenAI
+    # 3. Fallback to OpenAI
     return ChatOpenAI(
         model="gpt-4o", 
         api_key=settings.OPENAI_API_KEY,
@@ -123,11 +142,29 @@ def get_search_service():
         return TavilySearchService(api_key=settings.TAVILY_API_KEY)
     return None
 
+TRUSTED_DOMAINS_BY_INDUSTRY = {
+    "technology": ["techcrunch.com", "wired.com", "theverge.com", "arstechnica.com", "venturebeat.com"],
+    "startup":    ["techcrunch.com", "forbes.com", "inc.com", "entrepreneur.com", "ycombinator.com"],
+    "finance":    ["bloomberg.com", "reuters.com", "ft.com", "wsj.com", "economictimes.indiatimes.com"],
+    "health":     ["who.int", "healthline.com", "medscape.com", "nih.gov", "webmd.com"],
+    "marketing":  ["marketingweek.com", "adage.com", "hubspot.com", "searchengineland.com"],
+    "education":  ["edtech.com", "edsurge.com", "chronicle.com", "timeshighereducation.com"],
+}
+
+BLOCKED_DOMAINS = [
+    "imdb.com", "wikipedia.org", "quora.com", "reddit.com",
+    "youtube.com", "pinterest.com", "instagram.com", "twitter.com",
+    "amazon.com", "ebay.com", "craigslist.com",
+]
+
 def research_agent(state: GraphState) -> GraphState:
     """Discovers trending and relevant news articles."""
     queries = state.get("search_queries", [])
     if not queries:
         queries = state["keywords"]
+    
+    industry = state.get("industry", "general")
+    trusted_domains = TRUSTED_DOMAINS_BY_INDUSTRY.get(industry.lower(), [])
     
     articles = []
     
@@ -143,7 +180,14 @@ def research_agent(state: GraphState) -> GraphState:
         })
     else:
         for query in queries:
-            results = search_service.search(query=query, max_results=3)
+            results = search_service.search(
+                query=query, 
+                max_results=3,
+                topic="news",
+                days=7,
+                include_domains=trusted_domains if trusted_domains else None,
+                exclude_domains=BLOCKED_DOMAINS
+            )
             articles.extend(results)
             
     return {**state, "current_articles": articles}
@@ -151,15 +195,40 @@ def research_agent(state: GraphState) -> GraphState:
 def verification_agent(state: GraphState) -> GraphState:
     """Evaluates article quality and relevance."""
     articles = state.get("current_articles", [])
+    keywords = state.get("keywords", [])
+    industry = state.get("industry", "general")
+    platform = state.get("platform", "instagram")
     approved = []
+    rejection_reasons = []
     
-    # Mocking Verification logic > 7.0 score
-    for idx, article in enumerate(articles):
-        # We approve the first one or if we have less than 3
-        if idx < 2:
-            approved.append(article)
+    llm = get_llm(temperature=0.1)
+    
+    for article in articles:
+        try:
+            prompt = build_article_verification_prompt(
+                article=article,
+                keywords=keywords,
+                industry=industry,
+                platform=platform
+            )
+            messages = [HumanMessage(content=prompt)]
+            response = llm.invoke(messages)
             
-    return {**state, "approved_articles": approved}
+            result = _parse_llm_json(response.content)
+            if isinstance(result, list) and len(result) > 0:
+                result = result[0]
+            
+            if isinstance(result, dict) and result.get("approve"):
+                approved.append(article)
+            elif isinstance(result, dict) and result.get("reject_reason"):
+                rejection_reasons.append(f"{article['url']}: {result.get('reject_reason')}")
+            else:
+                rejection_reasons.append(f"{article['url']}: Failed to parse LLM response")
+        except Exception as e:
+            logger.error(f"Verification failed for {article['url']}: {e}")
+            rejection_reasons.append(f"{article['url']}: Error {str(e)}")
+            
+    return {**state, "approved_articles": approved, "rejection_reasons": rejection_reasons}
 
 def rag_retrieval_agent(state: GraphState) -> GraphState:
     """Retrieves domain and creator style context from Qdrant."""
@@ -171,191 +240,126 @@ def rag_retrieval_agent(state: GraphState) -> GraphState:
         from services.rag import get_rag_service
         rag_service = get_rag_service()
         context = rag_service.retrieve_context(creator_id, keywords, industry)
-        return {**state, "rag_context": context}
-    return {**state, "rag_context": "Fallback context: Create professional, engaging content."}
+        if context:
+            return {**state, "rag_context": context}
+    return {**state, "rag_context": ""}
 
 def query_refinement_agent(state: GraphState) -> GraphState:
-    """Improves search quality after verification failures."""
+    """Generates better search queries after verification failures."""
     retries = state.get("retries", 0) + 1
-    new_queries = [f"{kw} latest news" for kw in state["keywords"]]
+
+    llm = get_llm(temperature=0.4)
+    prompt = build_query_refinement_prompt(
+        topic=", ".join(state.get("keywords", [])),
+        keywords=state.get("keywords", []),
+        industry=state.get("industry", "general"),
+        content_angle=state.get("content_angle", "Latest News & Updates"),
+        audience=state.get("audience", "general"),
+        failed_queries=state.get("search_queries", state.get("keywords", [])),
+        rejection_reasons=state.get("rejection_reasons", [])
+    )
+    
+    try:
+        response = llm.invoke([HumanMessage(content=prompt)])
+        result = _parse_llm_json(response.content)
+        if isinstance(result, list) and len(result) > 0:
+            result = result[0]
+            
+        new_queries = result.get("queries", [])
+        if not new_queries:
+            raise ValueError("No queries returned")
+    except Exception as e:
+        logger.error(f"Query refinement failed: {e}")
+        new_queries = [f"{kw} latest news" for kw in state.get("keywords", [])]
+
     return {**state, "retries": retries, "search_queries": new_queries}
 
 # [DRY] — extracted JSON parsing; reused in both generation passes
-def _parse_llm_json(raw_content) -> list:
-    """Parse JSON from LLM response, handling markdown code fences."""
+def _parse_llm_json(raw_content) -> Any:
+    """Parse JSON from LLM response, handling markdown code fences and conversational text."""
+    import re
     if not isinstance(raw_content, str):
         raw_content = raw_content[0].get("text", "") if isinstance(raw_content, list) and isinstance(raw_content[0], dict) else str(raw_content)
     content = raw_content.strip()
-    if content.startswith("```json"):
-        content = content[7:]
-    if content.startswith("```"):
-        content = content[3:]
-    if content.endswith("```"):
-        content = content[:-3]
+    
+    # Try to find a JSON block (array or object)
+    match = re.search(r'(\{.*\}|\[.*\])', content, re.DOTALL)
+    if match:
+        content = match.group(0)
+    else:
+        # Fallback to standard stripping
+        if content.startswith("```json"):
+            content = content[7:]
+        if content.startswith("```"):
+            content = content[3:]
+        if content.endswith("```"):
+            content = content[:-3]
+            
     return json.loads(content.strip())
-
-
-# [SOLID: SRP] — industry tone mapping separated from generation logic
-_INDUSTRY_TONE = {
-    "technology": "authoritative and data-driven. Use precise metrics, cite breakthroughs, appeal to builders and engineers.",
-    "startup": "bold and visionary. Speak founder-to-founder, emphasize disruption and opportunity.",
-    "health": "empathetic and evidence-based. Lead with patient outcomes, cite research, build trust.",
-    "finance": "precise and trust-building. Use concrete numbers, reference markets, project confidence.",
-    "education": "inspiring and accessible. Break down complexity, celebrate learning, encourage curiosity.",
-    "marketing": "punchy and conversion-focused. Lead with results, use power words, spark FOMO.",
-}
-
-
-def _get_tone_guidance(industry: str) -> str:
-    """Return tone guidance based on industry, with a sensible default."""
-    key = industry.lower().strip()
-    for industry_key, tone in _INDUSTRY_TONE.items():
-        if industry_key in key:
-            return tone
-    return "professional yet conversational. Balance insight with accessibility. Be engaging without being salesy."
-
-
-_GENERATION_SYSTEM_PROMPT = """You are a world-class social media carousel content strategist. Your carousels consistently go viral because they follow a proven narrative arc.
-
-INDUSTRY TONE: {tone}
-
-CREATOR CONTEXT & TEMPLATES:
-{rag_context}
-
-CAROUSEL ARCHITECTURE (5 slides):
-- Slide 1 (HOOK): Stop the scroll. Use a provocative question, surprising statistic, or bold claim from the article. This slide MUST make someone pause mid-scroll.
-- Slide 2 (CONTEXT): Set the stage. Why does this matter RIGHT NOW? Connect to a trend, pain point, or aspiration your audience feels.
-- Slide 3 (INSIGHT): Deliver the core takeaway. The one thing they'll remember and share. Make it quotable.
-- Slide 4 (PROOF): Back it up. Data point, example, or real-world application that makes the insight concrete.
-- Slide 5 (CTA): Drive engagement. Ask a polarizing question, invite opinions, or tease what's next. Never end with "follow for more."
-
-RULES:
-- Each slide's text_content must be 60-280 characters. Short enough to read in 3 seconds, long enough to deliver value.
-- Use the article's ACTUAL data, names, and facts — do NOT make up statistics.
-- Write in active voice. No passive constructions.
-- Each slide must stand alone but create momentum to swipe.
-- Emoji usage: 1 per slide maximum, only when it adds meaning.
-
-RESPOND WITH ONLY a valid JSON array of 5 objects:
-[
-  {{
-    "hook_type": "question" | "statistic" | "bold_claim" | "story" | "cta",
-    "text_content": "The main copy for this slide",
-    "caption": "Supporting context or subtitle (optional, keep under 100 chars)",
-    "image_prompt": "A CREATIVE DIRECTION brief (one line per field) describing the background composition. Use this template: ROLE: <hook|context|insight|proof|cta> | PALETTE: <2-3 colors> | FOCAL: <main visual element> | TEXT_ZONE: <center-bottom third | full center | lower-left aligned | right half clear> | COMPOSITION: <what's in the text zone> | REFERENCE: <1-2 real references like Substack, Linear, Are.na, Kinfolk, Pinterest editorial, magazine spread, Goop, Bloomberg, Apple keynote> | MOOD: <1-2 words> | AVOID: <faces, stock photos, neon, AI-glossy renders, busy collages, AND no text/letters/words in the image>. The image is a SLIDE BACKGROUND (1080x1080). Real text overlays later in a brand font. Image must support, not compete with, that text.",
-    "emoji": "A single emoji that fits this slide's energy"
-  }}
-]"""
-
-_REFINEMENT_SYSTEM_PROMPT = """You are a senior content editor reviewing carousel slides for a {industry} brand.
-
-Your job: sharpen every slide for MAXIMUM engagement. Apply these rules ruthlessly:
-
-1. HOOK TEST: Would slide 1 make YOU stop scrolling? If not, rewrite it with a stronger opening.
-2. CURIOSITY GAP: Does each slide make you NEED to see the next one? Add tension.
-3. SPECIFICITY: Replace vague claims with concrete details from the article.
-4. VOICE: Ensure the tone matches {industry} audiences — {tone}
-5. CTA: The final slide should spark genuine conversation, not feel like marketing.
-6. EMOJI: Verify each emoji adds meaning. Remove decorative ones.
-7. IMAGE BRIEF: The image_prompt must NEVER direct DALL-E to render text. DALL-E's job is to design a composed background with a clear empty text zone in the specified text_zone position. Real text is overlaid separately.
-
-ORIGINAL ARTICLE CONTEXT:
-Title: {title}
-Summary: {summary}
-
-Review the draft slides below and return an IMPROVED version. Same JSON format, 5 slides.
-Return ONLY the JSON array, no explanation."""
 
 
 def content_generation_agent(state: GraphState) -> GraphState:
     """Converts approved articles into premium carousel content using two-pass generation."""
     approved_articles = state.get("approved_articles", [])
     industry = state.get("industry", "general")
+    audience = state.get("audience", "general")
+    tone = state.get("tone", "")
+    content_angle = state.get("content_angle", "Latest News & Updates")
+    platform = state.get("platform", "instagram")
+    language = state.get("language", "english")
     rag_context = state.get("rag_context", "")
+    slide_count = state.get("slide_count", 5)
     generated = {}
-    tone = _get_tone_guidance(industry)
 
     for article in approved_articles:
         llm = get_llm(temperature=0.7)
 
         # --- Pass 1: Draft generation ---
+        sys_prompt_1 = build_generation_system_prompt(
+            industry=industry,
+            audience=audience,
+            tone=tone,
+            content_angle=content_angle,
+            platform=platform,
+            language=language,
+            slide_count=slide_count,
+            creator_style=rag_context,
+        )
+        usr_prompt_1 = build_generation_user_prompt(
+            article=article,
+            slide_count=slide_count,
+            audience=audience,
+            tone=tone,
+            language=language,
+            industry=industry,
+        )
+        
         draft_messages = [
-            SystemMessage(content=_GENERATION_SYSTEM_PROMPT.format(tone=tone, rag_context=rag_context)),
-            HumanMessage(content=f"Industry: {industry}\nTitle: {article['title']}\nSource: {article.get('source', 'Unknown')}\nPublished: {article.get('published_date', 'Recent')}\nSummary: {article['summary']}")
+            SystemMessage(content=sys_prompt_1),
+            HumanMessage(content=usr_prompt_1)
         ]
 
-        try:
-            draft_response = llm.invoke(draft_messages)
-            draft_slides = _parse_llm_json(draft_response.content)
+        draft_response = llm.invoke(draft_messages)
+        draft_slides = _parse_llm_json(draft_response.content)
 
-            # --- Pass 2: Refinement ---
-            refine_messages = [
-                SystemMessage(content=_REFINEMENT_SYSTEM_PROMPT.format(
-                    industry=industry,
-                    tone=tone,
-                    title=article['title'],
-                    summary=article['summary']
-                )),
-                HumanMessage(content=json.dumps(draft_slides, indent=2))
-            ]
+        # --- Pass 2: Refinement ---
+        sys_prompt_2 = build_refinement_system_prompt(
+            industry=industry,
+            audience=audience,
+            tone=tone,
+            content_angle=content_angle,
+            platform=platform,
+            language=language,
+            article=article
+        )
+        refine_messages = [
+            SystemMessage(content=sys_prompt_2),
+            HumanMessage(content=json.dumps(draft_slides, indent=2))
+        ]
 
-            refined_response = llm.invoke(refine_messages)
-            refined_slides = _parse_llm_json(refined_response.content)
-            generated[article["url"]] = refined_slides
-
-        except Exception as e:
-            print(f"Failed to generate content for {article['url']}: {e}")
-            # Structured fallback with proper slide architecture
-            # Each slide now carries a text_zone and visual_type for downstream
-            # image generation and rendering decisions.
-            _fb_palette = "cream, charcoal, warm terracotta"
-            generated[article["url"]] = [
-                {
-                    "hook_type": "bold_claim",
-                    "text_content": article['title'],
-                    "caption": f"Source: {article.get('source', 'Unknown')}",
-                    "image_prompt": f"ROLE: hook | PALETTE: {_fb_palette} | FOCAL: bold typography metaphor | TEXT_ZONE: full center | COMPOSITION: negative space | REFERENCE: Substack hero, Apple keynote minimal | MOOD: quiet authority | AVOID: faces, stock photos, neon, text/letters",
-                    "emoji": "🔥",
-                    "text_zone": "full center",
-                    "visual_type": "generative",
-                },
-                {
-                    "hook_type": "story",
-                    "text_content": f"Here's why this matters for {industry} right now.",
-                    "caption": "",
-                    "image_prompt": f"ROLE: context | PALETTE: {_fb_palette} | FOCAL: abstract trend visualization | TEXT_ZONE: center-bottom third | COMPOSITION: soft gradient | REFERENCE: Pinterest editorial | MOOD: considerate | AVOID: faces, stock photos, neon, text/letters",
-                    "emoji": "💡",
-                    "text_zone": "center-bottom third",
-                    "visual_type": "minimalist",
-                },
-                {
-                    "hook_type": "statistic",
-                    "text_content": article.get('summary', 'Key insight from this story.')[:280],
-                    "caption": "",
-                    "image_prompt": f"ROLE: insight | PALETTE: {_fb_palette} | FOCAL: data point visualization | TEXT_ZONE: center-bottom third | COMPOSITION: abstract infographic | REFERENCE: Bloomberg Pursuits | MOOD: authoritative | AVOID: faces, stock photos, neon, text/letters",
-                    "emoji": "📊",
-                    "text_zone": "center-bottom third",
-                    "visual_type": "minimalist",
-                },
-                {
-                    "hook_type": "story",
-                    "text_content": "The implications are bigger than most people realize.",
-                    "caption": "",
-                    "image_prompt": f"ROLE: proof | PALETTE: {_fb_palette} | FOCAL: perspective shot | TEXT_ZONE: center-bottom third | COMPOSITION: futuristic layering | REFERENCE: Linear docs style | MOOD: forward-looking | AVOID: faces, stock photos, neon, text/letters",
-                    "emoji": "🚀",
-                    "text_zone": "center-bottom third",
-                    "visual_type": "minimalist",
-                },
-                {
-                    "hook_type": "cta",
-                    "text_content": "What's your take? Drop your thoughts below 👇",
-                    "caption": "",
-                    "image_prompt": f"ROLE: cta | PALETTE: {_fb_palette} | FOCAL: conversation prompt | TEXT_ZONE: lower-left aligned | COMPOSITION: clear negative space | REFERENCE: social comment bubbles | MOOD: engaged | AVOID: faces, stock photos, neon, text/letters",
-                    "emoji": "💬",
-                    "text_zone": "lower-left aligned",
-                    "visual_type": "minimalist",
-                },
-            ]
+        refined_response = llm.invoke(refine_messages)
+        refined_slides = _parse_llm_json(refined_response.content)
+        generated[article["url"]] = refined_slides
 
     return {**state, "generated_slides": generated}
 
@@ -363,23 +367,50 @@ def content_generation_agent(state: GraphState) -> GraphState:
 def slide_verification_agent(state: GraphState) -> GraphState:
     """Validates generated content quality before publishing."""
     generated = state.get("generated_slides", {})
+    industry = state.get("industry", "general")
+    audience = state.get("audience", "general")
+    tone = state.get("tone", "")
+    content_angle = state.get("content_angle", "Latest News & Updates")
+    platform = state.get("platform", "instagram")
+    language = state.get("language", "english")
+    slide_count = state.get("slide_count", 5)
+    
     approved = {}
+    
+    # Need article lookup by URL to get title and summary
+    articles_by_url = {a["url"]: a for a in state.get("approved_articles", [])}
+
+    llm = get_llm(temperature=0.1)
 
     for url, slides in generated.items():
-        valid_slides = []
-        for slide in slides:
-            text = slide.get("text_content", "")
-            # Verify: has content, within character limit, has required fields
-            if (10 < len(text) < 300
-                and slide.get("hook_type")
-                and slide.get("image_prompt")
-                and slide.get("text_zone") in {"center-bottom third", "full center", "lower-left aligned", "right half clear"}
-                and slide.get("visual_type") in {"minimalist", "thematic", "generative"}):
-                valid_slides.append(slide)
-        # Only approve if we have at least 3 valid slides
-        if len(valid_slides) >= 3:
-            approved[url] = valid_slides
-
+        article = articles_by_url.get(url, {})
+        
+        prompt = build_verification_prompt(
+            slides=slides,
+            article=article,
+            industry=industry,
+            audience=audience,
+            tone=tone,
+            content_angle=content_angle,
+            platform=platform,
+            language=language,
+            slide_count=slide_count
+        )
+        
+        try:
+            response = llm.invoke([HumanMessage(content=prompt)])
+            result = _parse_llm_json(response.content)
+            
+            if isinstance(result, list) and len(result) > 0:
+                result = result[0]
+                
+            if isinstance(result, dict) and result.get("passed"):
+                approved[url] = slides
+            else:
+                logger.warning(f"Slide verification failed for {url}: {result.get('failed_checks', [])}")
+        except Exception as e:
+            logger.error(f"Slide verification failed to parse LLM response for {url}: {e}")
+            
     return {**state, "approved_slides": approved}
 
 
@@ -387,3 +418,4 @@ def publishing_agent(state: GraphState) -> GraphState:
     """Publishes approved content."""
     # This is a stub for the publishing API
     return {**state, "publish_status": "Success"}
+

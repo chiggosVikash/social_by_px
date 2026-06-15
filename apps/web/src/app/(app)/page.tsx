@@ -224,10 +224,11 @@ function ProjectCard({ project }: { project: Project }) {
         )}
         
         <div className="pt-4 border-t border-border/40 space-y-2">
-          {!isCompleted && (
             <Button
               className={isFailed 
                 ? "w-full justify-center rounded-lg font-medium bg-destructive/10 text-destructive hover:bg-destructive/20 hover:text-destructive group/btn transition-colors"
+                : isCompleted
+                ? "w-full justify-center rounded-lg font-medium border border-border/50 bg-secondary/30 text-muted-foreground hover:bg-secondary hover:text-foreground group/btn transition-colors"
                 : "w-full justify-between rounded-lg font-medium bg-secondary text-secondary-foreground hover:bg-primary hover:text-primary-foreground group/btn transition-colors"
               }
               onClick={handleRunWorkflow}
@@ -236,6 +237,10 @@ function ProjectCard({ project }: { project: Project }) {
               {isFailed ? (
                 <span className="flex items-center">
                   <RotateCcw className="mr-2 h-4 w-4" /> Replay Workflow
+                </span>
+              ) : isCompleted ? (
+                <span className="flex items-center">
+                  <RotateCcw className="mr-2 h-4 w-4" /> Re-run Workflow
                 </span>
               ) : (
                 <>
@@ -246,7 +251,6 @@ function ProjectCard({ project }: { project: Project }) {
                 </>
               )}
             </Button>
-          )}
         </div>
       </CardContent>
       <PreviewModal projectId={project.id} open={isPreviewOpen} onOpenChange={setIsPreviewOpen} />

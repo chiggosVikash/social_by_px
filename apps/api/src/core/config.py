@@ -41,6 +41,10 @@ class Settings(BaseSettings):
     COHERE_API_KEY: str = ""
     GEMINI_MODEL: str = "gemma-4-31b-it"
     
+    # OpenRouter
+    OPENROUTER_API_KEY: str = ""
+    OPENROUTER_MODEL: str = "meta-llama/llama-3-70b-instruct"
+    
     # Qdrant Cloud
     QDRANT_URL: str = ""
     QDRANT_API_KEY: str = ""
