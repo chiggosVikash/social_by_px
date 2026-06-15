@@ -12,6 +12,7 @@ It combines LangGraph AI agents, workflow orchestration (RQ), automated image ge
 - **Human-in-the-Loop**: A clean Next.js UI to review, approve, or reject AI-generated content before publishing.
 - **Multi-Platform Publishing**: Strategy-pattern based integrations for Instagram Carousels and Facebook Posts via the Meta Graph API.
 - **Monorepo Architecture**: Clean separation between a fast, SOLID-compliant FastAPI backend and a responsive Next.js frontend.
+- **Style Presets & Visual Types**: Each project picks one of 6 visual styles; slides are routed to cheap PIL gradients, uploaded templates, or premium DALL-E art based on what they need.
 
 ## Tech Stack
 
@@ -22,6 +23,29 @@ It combines LangGraph AI agents, workflow orchestration (RQ), automated image ge
 - **Background Jobs**: Redis Queue (RQ)
 - **Security**: Cryptography (Fernet) for token encryption
 - **Package Managers**: `uv` (Python), `pnpm` (Node)
+
+## Image Generation System
+
+The platform now generates premium-quality carousel visuals with a Gen Z aesthetic:
+
+### Key Improvements
+- **Style Presets**: Each project chooses a visual style (6 options) that locks the color palette and aesthetic vocabulary
+- **Structured Prompts**: LLM generates creative direction briefs, not generic "abstract background" prompts
+- **Text-Accurate Generation**: DALL-E designs compositions with intentional text zones; PIL renders the actual text
+- **Cost-Effective**: Only 1-2 DALL-E calls per carousel (vs 5 before), saving 60-80%
+
+### Visual Types Per Slide
+- **Hook slide**: Full AI-generated art (highest visual impact)
+- **Context/Insight**: Template or gradient (cost-effective, text-focused)
+- **Proof/CTA**: Always gradient + typography (maximum text clarity)
+
+### Default Styles
+- **General Soft**: Neutral cream & charcoal, versatile for all industries
+- **Tech Editorial**: Muted earth tones, Substack + Linear aesthetic
+- **Health Warm**: Warm cream with botanicals, Kinfolk + Goop style
+- **Finance Paper**: Cream paper, Bloomberg + Economist aesthetic
+- **Education Warm**: Academic, Are.na + Kinfeel aesthetic  
+- **Marketing Bold**: High contrast, Apple keynote + Dribbble style
 
 ## Prerequisites
 
