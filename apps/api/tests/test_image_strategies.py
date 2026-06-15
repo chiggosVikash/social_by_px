@@ -169,6 +169,7 @@ async def test_template_compositing_slide_image_strategy(mock_upload_file, mock_
         emoji=mock_slide.emoji,
         caption=mock_slide.caption,
         background_url=mock_project_template.background_image_url,
+        text_zone=mock_slide.text_zone or "center-bottom third",
         slide_index=2,
         total_slides=5
     )

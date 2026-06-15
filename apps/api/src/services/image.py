@@ -193,6 +193,7 @@ class TemplateCompositingSlideImageStrategy(SlideImageGenerationStrategy):
             emoji=slide.emoji,
             caption=slide.caption,
             background_url=project.background_image_url,
+            text_zone=slide.text_zone or "center-bottom third",
             slide_index=idx,
             total_slides=total
         )
