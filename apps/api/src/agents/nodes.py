@@ -309,9 +309,15 @@ def content_generation_agent(state: GraphState) -> GraphState:
     language = state.get("language", "english")
     rag_context = state.get("rag_context", "")
     slide_count = state.get("slide_count", 5)
-    generated = {}
+    generated = state.get("generated_slides", {})
+    approved_slides = state.get("approved_slides", {})
 
     for article in approved_articles:
+        url = article["url"]
+        if url in approved_slides:
+            # Already generated and verified, skip
+            continue
+            
         llm = get_llm(temperature=0.7)
 
         # --- Pass 1: Draft generation ---
@@ -410,6 +416,10 @@ def slide_verification_agent(state: GraphState) -> GraphState:
                 logger.warning(f"Slide verification failed for {url}: {result.get('failed_checks', [])}")
         except Exception as e:
             logger.error(f"Slide verification failed to parse LLM response for {url}: {e}")
+            
+    if not approved or len(approved) < len(articles_by_url):
+        current_retries = state.get("slide_retries", 0)
+        return {**state, "approved_slides": approved, "slide_retries": current_retries + 1}
             
     return {**state, "approved_slides": approved}
 

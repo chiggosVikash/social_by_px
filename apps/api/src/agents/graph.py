@@ -26,10 +26,21 @@ def should_refine(state: GraphState) -> str:
 def is_content_valid(state: GraphState) -> str:
     """Determine if slides are valid or need regeneration."""
     approved_slides = state.get("approved_slides", {})
-    # If any slide sets were approved, we can publish (or send to human approval).
+    approved_articles = state.get("approved_articles", [])
+    
+    # If all articles have approved slides, we publish
+    if len(approved_slides) >= len(approved_articles) and approved_articles:
+        return "publish"
+        
+    retries = state.get("slide_retries", 0)
+    if retries < 3:
+        return "regenerate"
+    
+    # Even if some failed, publish the ones that succeeded, or end if none
     if approved_slides:
         return "publish"
-    return "regenerate"
+        
+    return "end"
 
 def build_graph() -> CompiledStateGraph[GraphState, None, GraphState, GraphState]:  # type: ignore[type-var]
     workflow = StateGraph[GraphState](GraphState)  # type: ignore[type-var]
@@ -65,7 +76,8 @@ def build_graph() -> CompiledStateGraph[GraphState, None, GraphState, GraphState
         is_content_valid,
         {
             "publish": "publish", # In reality, we stop before publishing for human approval.
-            "regenerate": "generate"
+            "regenerate": "generate",
+            "end": END
         }
     )
     

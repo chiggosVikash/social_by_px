@@ -1,6 +1,11 @@
 from typing import List, Dict, Any, Literal, Optional, TypedDict
 import operator
 
+try:
+    from typing import NotRequired
+except ImportError:
+    from typing_extensions import NotRequired
+
 class ArticleData(TypedDict):
     title: str
     url: str
@@ -30,19 +35,19 @@ class GraphState(TypedDict):
     project_id: int
     creator_id: int
     keywords: List[str]
-    industry: str
-    audience: str
-    tone: str
-    content_angle: str
-    platform: str
-    language: str
-    rag_context: Optional[str]
-    slide_count: int
+    industry: NotRequired[str]
+    audience: NotRequired[str]
+    tone: NotRequired[str]
+    content_angle: NotRequired[str]
+    platform: NotRequired[str]
+    language: NotRequired[str]
+    rag_context: NotRequired[Optional[str]]
+    slide_count: NotRequired[int]
     
     # Research state
-    search_queries: List[str]
-    current_articles: List[ArticleData]
-    retries: int
+    search_queries: NotRequired[List[str]]
+    current_articles: NotRequired[List[ArticleData]]
+    retries: NotRequired[int]
     
     # Verification state
     approved_articles: List[ArticleData]
@@ -53,6 +58,7 @@ class GraphState(TypedDict):
     
     # Slide verification state
     approved_slides: Dict[str, List[SlideData]]
+    slide_retries: NotRequired[int]
     
     # Publishing State
     publish_status: str

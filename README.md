@@ -171,6 +171,54 @@ social_by_px/
 └── .env.example              # Example environment variables
 ```
 
+### System Architecture Diagram
+
+```mermaid
+graph TD
+    %% Define Styles
+    classDef frontend fill:#3b82f6,stroke:#1d4ed8,stroke-width:2px,color:#fff
+    classDef backend fill:#10b981,stroke:#047857,stroke-width:2px,color:#fff
+    classDef database fill:#f59e0b,stroke:#b45309,stroke-width:2px,color:#fff
+    classDef external fill:#8b5cf6,stroke:#4c1d95,stroke-width:2px,color:#fff
+    classDef worker fill:#ef4444,stroke:#b91c1c,stroke-width:2px,color:#fff
+
+    User((User)) --> |Interacts| NextJS
+
+    subgraph Frontend Application
+        NextJS["Next.js Web App<br/>(React, Tailwind, Zustand)"]:::frontend
+    end
+
+    subgraph Backend Infrastructure
+        FastAPI["FastAPI Server<br/>(Python 3.12+)"]:::backend
+        RQ["Redis Queue<br/>(Task Broker)"]:::database
+        DB[(PostgreSQL DB<br/>via SQLAlchemy)]:::database
+        Worker["RQ Worker<br/>(Background Jobs)"]:::worker
+        Graph["LangGraph Agents<br/>(AI Orchestrator)"]:::worker
+    end
+
+    subgraph External APIs & Services
+        LLM["LLM Providers<br/>(OpenRouter, Gemini, OpenAI)"]:::external
+        Search["Tavily Search API<br/>(Web Research)"]:::external
+        Social["Meta Graph API<br/>(Publishing)"]:::external
+        RAG["Qdrant Vector DB<br/>(RAG Context)"]:::external
+        Storage["Cloudflare R2<br/>(Image Storage)"]:::external
+    end
+
+    NextJS --> |REST API / Axios| FastAPI
+    FastAPI --> |Reads/Writes| DB
+    FastAPI --> |Enqueues Tasks| RQ
+    RQ --> |Consumes| Worker
+    Worker --> |Executes Workflow| Graph
+    Worker --> |Updates Status| DB
+    Worker --> |Saves Images| Storage
+
+    Graph --> |Agent Prompts| LLM
+    Graph --> |News Search| Search
+    Graph --> |Fetch Context| RAG
+    
+    FastAPI --> |Publishes Content| Social
+```
+
 ### Request Lifecycle & Data Flow
 
 1. **Frontend Request**: The Next.js frontend uses Axios (or React Server Components) to request data from the FastAPI backend.

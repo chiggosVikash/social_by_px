@@ -133,6 +133,7 @@ async def _run_workflow_async(run_id: int):
                 "current_articles": [],
                 "retries": 0,
                 "approved_articles": [],
+                "rejection_reasons": [],
                 "generated_slides": {},
                 "approved_slides": {},
                 "publish_status": ""
@@ -236,20 +237,33 @@ async def _run_article_regeneration_async(article_id: int):
                     "source": str(article.source or ""),
                     "published_date": article.published_date.isoformat() if article.published_date else ""
                 }],
+                "rejection_reasons": [],
                 "generated_slides": {},
                 "approved_slides": {},
                 "publish_status": ""
             }
             
-            await notifier.publish("Agent 'generate' is working...")
-            state = content_generation_agent(state)
+            MAX_RETRIES = 3
+            attempt = 0
+            approved_slides = []
             
-            await notifier.publish("Agent 'verify_slides' is working...")
-            state = slide_verification_agent(state)
+            while attempt < MAX_RETRIES:
+                await notifier.publish(f"Agent 'generate' is working... (Attempt {attempt + 1}/{MAX_RETRIES})")
+                state = content_generation_agent(state)
+                
+                await notifier.publish(f"Agent 'verify_slides' is working... (Attempt {attempt + 1}/{MAX_RETRIES})")
+                state = slide_verification_agent(state)
+                
+                approved_slides = state.get("approved_slides", {}).get(str(article.url), [])
+                if approved_slides:
+                    break
+                    
+                attempt += 1
+                if attempt < MAX_RETRIES:
+                    logger.warning(f"Slide validation failed for article {article.id}. Retrying {attempt}/{MAX_RETRIES}...")
             
-            approved_slides = state.get("approved_slides", {}).get(str(article.url), [])
             if not approved_slides:
-                raise RuntimeError("Slide generation failed validation.")
+                raise RuntimeError(f"Slide generation failed validation after {MAX_RETRIES} attempts.")
             
             # Delete old slides
             for old_slide in list(article.slides):
