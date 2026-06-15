@@ -11,14 +11,24 @@ interface CreateProjectDialogProps {
   children: React.ReactElement;
 }
 
+const STYLE_PRESETS = [
+  { id: "general_soft", label: "General (Soft & Warm)" },
+  { id: "tech_editorial", label: "Tech & Editorial" },
+  { id: "health_warm", label: "Health & Wellness" },
+  { id: "finance_paper", label: "Finance & Markets" },
+  { id: "education_warm", label: "Education & Learning" },
+  { id: "marketing_bold", label: "Marketing & Brand" },
+];
+
 export function CreateProjectDialog({ children }: CreateProjectDialogProps) {
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
   const [industry, setIndustry] = useState("");
   const [keywords, setKeywords] = useState("");
   const [avoidImageGeneration, setAvoidImageGeneration] = useState(false);
+  const [stylePreset, setStylePreset] = useState("general_soft");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  
+
   const createProject = useProjectStore((state) => state.createProject);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -37,13 +47,15 @@ export function CreateProjectDialog({ children }: CreateProjectDialogProps) {
         industry: industry.trim(),
         keywords: keywordList,
         avoid_image_generation: avoidImageGeneration,
+        style_preset: stylePreset,
       });
-      
+
       // Reset and close
       setName("");
       setIndustry("");
       setKeywords("");
       setAvoidImageGeneration(false);
+      setStylePreset("general_soft");
       setOpen(false);
     } catch (error) {
       console.error("Failed to create project", error);
@@ -114,6 +126,23 @@ export function CreateProjectDialog({ children }: CreateProjectDialogProps) {
               />
               <span className="text-xs text-muted-foreground">Skip DALL-E, upload your own background template instead.</span>
             </div>
+          </div>
+          <div className="grid grid-cols-4 items-center gap-4">
+            <Label htmlFor="stylePreset" className="text-right text-xs leading-tight">
+              Visual Style
+            </Label>
+            <select
+              id="stylePreset"
+              value={stylePreset}
+              onChange={(e) => setStylePreset(e.target.value)}
+              className="col-span-3 flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring cursor-pointer"
+            >
+              {STYLE_PRESETS.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.label}
+                </option>
+              ))}
+            </select>
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setOpen(false)}>

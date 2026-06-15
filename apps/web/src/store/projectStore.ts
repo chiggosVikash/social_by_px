@@ -18,7 +18,7 @@ export interface ProjectState {
 
 export interface ProjectActions {
   fetchProjects: () => Promise<void>;
-  createProject: (data: { name: string; industry: string; keywords: string[]; avoid_image_generation: boolean }) => Promise<void>;
+  createProject: (data: { name: string; industry: string; keywords: string[]; avoid_image_generation: boolean; style_preset?: string }) => Promise<void>;
   updateProjectSettings: (projectId: number, data: { name?: string; industry?: string; avoid_image_generation?: boolean }) => Promise<void>;
   runWorkflow: (projectId: number) => Promise<void>;
   fetchProjectStatus: (projectId: number) => Promise<string>;
