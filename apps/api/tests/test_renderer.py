@@ -140,3 +140,68 @@ async def test_composite_text_on_background_r2_public_direct():
         assert out_img.size == (1080, 1080)
 
 
+@pytest.mark.asyncio
+async def test_composite_text_on_background_accepts_bytes():
+    """Renderer should accept background_bytes directly."""
+    from services.renderer import composite_text_on_background
+
+    # Make a 1080x1080 cream image
+    img = Image.new("RGB", (1080, 1080), color=(245, 241, 232))
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    bg_bytes = buf.getvalue()
+
+    result = await composite_text_on_background(
+        text_content="Hello",
+        emoji="🔥",
+        caption="Subtitle",
+        background_url=None,
+        background_bytes=bg_bytes,
+        text_zone="center-bottom third",
+        slide_index=0,
+        total_slides=1,
+    )
+    assert isinstance(result, bytes)
+    assert len(result) > 0
+
+
+@pytest.mark.asyncio
+async def test_composite_text_on_background_raises_when_no_background():
+    """Renderer should raise ValueError when neither url nor bytes provided."""
+    from services.renderer import composite_text_on_background
+
+    with pytest.raises(ValueError, match="background"):
+        await composite_text_on_background(
+            text_content="Hello",
+            emoji=None,
+            caption=None,
+            background_url=None,
+            background_bytes=None,
+            text_zone="center-bottom third",
+        )
+
+
+@pytest.mark.asyncio
+async def test_composite_text_on_background_supports_all_zones():
+    """Renderer should accept all 4 valid text zones."""
+    from services.renderer import composite_text_on_background
+
+    img = Image.new("RGB", (1080, 1080), color=(245, 241, 232))
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    bg_bytes = buf.getvalue()
+
+    for zone in ["center-bottom third", "full center", "lower-left aligned", "right half clear"]:
+        result = await composite_text_on_background(
+            text_content="Test",
+            emoji=None,
+            caption=None,
+            background_url=None,
+            background_bytes=bg_bytes,
+            text_zone=zone,
+            slide_index=0,
+            total_slides=1,
+        )
+        assert isinstance(result, bytes)
+
+

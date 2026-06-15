@@ -18,10 +18,11 @@ export interface ProjectState {
 
 export interface ProjectActions {
   fetchProjects: () => Promise<void>;
-  createProject: (data: { name: string; industry: string; keywords: string[]; avoid_image_generation: boolean }) => Promise<void>;
+  createProject: (data: { name: string; industry: string; keywords: string[]; avoid_image_generation: boolean; style_preset?: string }) => Promise<void>;
   updateProjectSettings: (projectId: number, data: { name?: string; industry?: string; avoid_image_generation?: boolean }) => Promise<void>;
   runWorkflow: (projectId: number) => Promise<void>;
   fetchProjectStatus: (projectId: number) => Promise<string>;
+  deleteProject: (projectId: number) => Promise<void>;
 }
 
 export type ProjectStore = ProjectState & ProjectActions;
@@ -77,6 +78,17 @@ export const useProjectStore = create<ProjectStore>()(
       } catch (err) {
         console.error("Failed to fetch status", err);
         return "Unknown";
+      }
+    },
+    deleteProject: async (projectId) => {
+      set({ isLoading: true, error: null });
+      try {
+        await apiClient.delete(`/projects/${projectId}`);
+        await get().fetchProjects();
+      } catch (err: any) {
+        console.error("Failed to delete project", err);
+        set({ error: 'Failed to delete project', isLoading: false });
+        throw err;
       }
     }
   }))

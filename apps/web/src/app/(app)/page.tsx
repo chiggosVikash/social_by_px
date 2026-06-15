@@ -46,6 +46,7 @@ function ProjectCard({ project }: { project: Project }) {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const fetchProjectStatus = useProjectStore((state) => state.fetchProjectStatus);
   const runWorkflow = useProjectStore((state) => state.runWorkflow);
+  const deleteProject = useProjectStore((state) => state.deleteProject);
 
   // Initial fetch
   useEffect(() => {
@@ -130,6 +131,16 @@ function ProjectCard({ project }: { project: Project }) {
     }
   };
 
+  const handleDeleteProject = async () => {
+    if (!confirm("Are you sure you want to delete this project?")) return;
+    try {
+      await deleteProject(project.id);
+      toast.success("Project deleted successfully");
+    } catch (err) {
+      toast.error("Failed to delete project");
+    }
+  };
+
   const isCompleted = status === "Completed";
   const isWorking = status.includes("working") || status.includes("Starting");
   const hasStarted = status !== "Not started";
@@ -190,7 +201,7 @@ function ProjectCard({ project }: { project: Project }) {
               Duplicate
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem className="text-destructive focus:text-destructive">
+            <DropdownMenuItem onClick={handleDeleteProject} className="text-destructive focus:text-destructive cursor-pointer">
               <Trash2 className="mr-2 h-4 w-4" />
               Delete Project
             </DropdownMenuItem>

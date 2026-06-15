@@ -281,11 +281,11 @@ async def _render_slides_for_article(db, article, project) -> None:
         logger.warning(f"No background image URL set for project {project.id}, skipping render.")
         return
 
-    strategy = SlideImageStrategyFactory.get_strategy(project)
     slides_to_process = sorted(list(article.slides), key=lambda s: s.order_index)
     total_slides = len(slides_to_process)
 
     for idx, slide in enumerate(slides_to_process):
+        strategy = SlideImageStrategyFactory.get_strategy(slide.visual_type)
         logger.info(f"Rendering slide {idx+1}/{total_slides} for article {article.id} using strategy {strategy.__class__.__name__}")
         try:
             url = await strategy.generate_and_save(db, slide, article, project, idx, total_slides)
@@ -329,10 +329,7 @@ async def _run_image_generation_async(article_id: int):
 
         try:
             logger.info(f"Starting slide image generation for article {article_id} (Avoid AI: {project.avoid_image_generation})")
-            
-            # [PATTERN: Strategy] - Using strategy resolved from SlideImageStrategyFactory
-            strategy = SlideImageStrategyFactory.get_strategy(project)
-            
+
             if project.avoid_image_generation:
                 await notifier.publish("Rendering slide text onto background template...")
             else:
@@ -340,11 +337,13 @@ async def _run_image_generation_async(article_id: int):
 
             slides_to_process = sorted(list(article.slides), key=lambda s: s.order_index)
             total_slides = len(slides_to_process)
-            
+
             for idx, slide in enumerate(slides_to_process):
+                # [PATTERN: Strategy] - Resolve strategy per slide based on visual_type
+                strategy = SlideImageStrategyFactory.get_strategy(slide.visual_type)
                 logger.info(f"Processing slide {idx+1}/{total_slides} (ID: {slide.id}) using strategy {strategy.__class__.__name__}")
                 await notifier.publish(f"Generating image for slide {idx+1}/{total_slides}...")
-                
+
                 url = await strategy.generate_and_save(db, slide, article, project, idx, total_slides)
                 if url:
                     slide.image_url = url

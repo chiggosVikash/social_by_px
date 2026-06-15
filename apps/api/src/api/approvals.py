@@ -14,8 +14,8 @@ class SlideOut(BaseModel):
     image_url: str | None = None
     caption: str | None = None
     emoji: str | None = None
-    # [YAGNI-EXCEPTION: reserved for future per-slide model selection]
-    image_model: str | None = None
+    text_zone: str | None = None
+    visual_type: str | None = None
 
 class ApprovalItemOut(BaseModel):
     id: int
@@ -48,7 +48,8 @@ async def get_pending_approvals(
                     image_url=slide.image_url,
                     caption=slide.caption,
                     emoji=slide.emoji,
-                    image_model=slide.image_model,
+                    text_zone=getattr(slide, "text_zone", None),
+                    visual_type=getattr(slide, "visual_type", None),
                 ))
         
         items.append(ApprovalItemOut(

@@ -137,25 +137,42 @@ class DalleSlideImageStrategy(SlideImageGenerationStrategy):
         total: int
     ) -> Optional[str]:
         import uuid
+        from services.style_presets import get_preset
+        from services.renderer import composite_text_on_background
         from services.storage import upload_file
-        
-        prompt_source = slide.caption or slide.text_content or article.title
-        image_prompt = (
-            f"Soft, even lighting. No text, no people, no objects. "
-            f"Clean gradient or abstract pattern. Suitable for white text overlay. "
-            f"Modern editorial style. Theme: {prompt_source[:500]}"
+
+        preset = get_preset(getattr(project, "style_preset", None))
+
+        dalle_prompt = (
+            f"{slide.image_prompt}\n\n"
+            f"FORMAT: 1080x1080 square, social media carousel slide background.\n"
+            f"STYLE LOCK: {preset.style}\n"
+            f"COLOR PALETTE (use ONLY these, with at most 20% accent): "
+            f"{', '.join(preset.palette)}\n"
+            f"LEAVE A CLEAR {(slide.text_zone or 'center-bottom third').upper()} zone empty for text overlay.\n"
+            f"DO NOT include any text, letters, words, or typography in the image.\n"
+            f"NO faces, no people, no stock photos, no neon gradients, "
+            f"no glossy AI-render look, no busy collages."
         )
-        image_prompt = image_prompt[:950]
-        
+
         image_service = get_image_generation_service()
-        raw_image_bytes = await image_service.generate(image_prompt)
-        
+        raw_image_bytes = await image_service.generate(dalle_prompt)
         if not raw_image_bytes:
             return None
-            
-        optimized_bytes = ImageOptimizationService.optimize_for_web(raw_image_bytes, quality=80)
+
+        rendered_bytes = await composite_text_on_background(
+            text_content=slide.text_content or "",
+            emoji=slide.emoji,
+            caption=slide.caption,
+            background_url=None,
+            background_bytes=raw_image_bytes,
+            text_zone=slide.text_zone,
+            slide_index=idx,
+            total_slides=total,
+        )
+
+        optimized_bytes = ImageOptimizationService.optimize_for_web(rendered_bytes, quality=85)
         file_name = f"slides/article_{article.id}_slide_{idx}_{uuid.uuid4().hex[:8]}.webp"
-        
         return await upload_file(optimized_bytes, file_name, content_type="image/webp")
 
 
@@ -173,27 +190,80 @@ class TemplateCompositingSlideImageStrategy(SlideImageGenerationStrategy):
         import uuid
         from services.renderer import composite_text_on_background
         from services.storage import upload_file
-        
+
         if not project.background_image_url:
             raise ValueError("No background image template uploaded for project.")
-            
+
         rendered_bytes = await composite_text_on_background(
             text_content=slide.text_content or "",
             emoji=slide.emoji,
             caption=slide.caption,
             background_url=project.background_image_url,
+            text_zone=slide.text_zone or "center-bottom third",
             slide_index=idx,
             total_slides=total
         )
-        
+
+        file_name = f"slides/article_{article.id}_slide_{idx}_{uuid.uuid4().hex[:8]}.webp"
+        return await upload_file(rendered_bytes, file_name, content_type="image/webp")
+
+
+# [SOLID: OCP] - Concrete Strategy for Programmatic PIL Background (minimalist)
+class ProgrammaticPILStrategy(SlideImageGenerationStrategy):
+    """Minimal PIL gradient for 'minimalist' slides. Full implementation in the spec."""
+    async def generate_and_save(
+        self,
+        db: AsyncSession,
+        slide,
+        article,
+        project,
+        idx: int,
+        total: int,
+    ) -> Optional[str]:
+        import uuid
+        from services.renderer import composite_text_on_background
+        from services.storage import upload_file
+        from PIL import Image as PILImage, ImageDraw
+
+        # Create a simple gradient background
+        img = PILImage.new("RGB", (1080, 1080), color=(245, 241, 232))  # cream
+        draw = ImageDraw.Draw(img)
+        # Simple gradient from cream to charcoal
+        for y in range(1080):
+            r = int(245 - (y / 1080) * (245 - 45))
+            g = int(241 - (y / 1080) * (241 - 45))
+            b = int(232 - (y / 1080) * (232 - 45))
+            draw.line([(0, y), (1080, y)], fill=(r, g, b))
+
+        buf = io.BytesIO()
+        img.save(buf, format="PNG")
+        background_bytes = buf.getvalue()
+
+        rendered_bytes = await composite_text_on_background(
+            text_content=slide.text_content or "",
+            emoji=slide.emoji,
+            caption=slide.caption,
+            background_url=None,
+            background_bytes=background_bytes,
+            text_zone=slide.text_zone,
+            slide_index=idx,
+            total_slides=total,
+        )
         file_name = f"slides/article_{article.id}_slide_{idx}_{uuid.uuid4().hex[:8]}.webp"
         return await upload_file(rendered_bytes, file_name, content_type="image/webp")
 
 
 # [PATTERN: Factory] - Factory to resolve slide image generation strategy
 class SlideImageStrategyFactory:
+    _ROUTES = {
+        "minimalist": ProgrammaticPILStrategy,
+        "thematic": TemplateCompositingSlideImageStrategy,
+        "generative": DalleSlideImageStrategy,
+    }
+
     @staticmethod
-    def get_strategy(project) -> SlideImageGenerationStrategy:
-        if project.avoid_image_generation:
-            return TemplateCompositingSlideImageStrategy()
-        return DalleSlideImageStrategy()
+    def get_strategy(visual_type: str) -> SlideImageGenerationStrategy:
+        impl = SlideImageStrategyFactory._ROUTES.get(visual_type)
+        if impl is None:
+            raise ValueError(f"Unknown visual_type: {visual_type!r}")
+        return impl()

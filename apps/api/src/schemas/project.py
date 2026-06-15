@@ -17,6 +17,7 @@ class ProjectBase(BaseModel):
     industry: Optional[str] = None
     avoid_image_generation: bool = False
     background_image_url: Optional[str] = None
+    style_preset: Optional[str] = "general_soft"
 
 class ProjectCreate(ProjectBase):
     keywords: List[str] = []
@@ -26,11 +27,12 @@ class ProjectUpdate(BaseModel):
     industry: Optional[str] = None
     avoid_image_generation: Optional[bool] = None
     background_image_url: Optional[str] = None
+    style_preset: Optional[str] = "general_soft"
 
 class ProjectResponse(ProjectBase):
     id: int
     owner_id: int
     created_at: datetime
     keywords: List[ProjectKeywordResponse] = []
-    
+
     model_config = ConfigDict(from_attributes=True)

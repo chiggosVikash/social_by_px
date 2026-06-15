@@ -93,7 +93,9 @@ async def get_project_preview(project_id: int, db: AsyncSession = Depends(get_db
                     "text_content": slide.text_content,
                     "caption": slide.caption,
                     "image_url": slide.image_url,
-                    "emoji": slide.emoji
+                    "emoji": slide.emoji,
+                    "text_zone": getattr(slide, "text_zone", None),
+                    "visual_type": getattr(slide, "visual_type", None),
                 } for slide in sorted(article.slides, key=lambda s: s.order_index)
             ]
         })
@@ -119,6 +121,8 @@ async def update_project(
         project.avoid_image_generation = project_in.avoid_image_generation
     if project_in.background_image_url is not None:
         project.background_image_url = project_in.background_image_url
+    if project_in.style_preset is not None:
+        project.style_preset = project_in.style_preset
         
     await db.commit()
     await db.refresh(project)

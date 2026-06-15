@@ -1,4 +1,4 @@
-from typing import List, Dict, Any, Optional, TypedDict
+from typing import List, Dict, Any, Literal, Optional, TypedDict
 import operator
 
 class ArticleData(TypedDict):
@@ -8,12 +8,23 @@ class ArticleData(TypedDict):
     published_date: str
     summary: str
 
+TextZone = Literal[
+    "center-bottom third",
+    "full center",
+    "lower-left aligned",
+    "right half clear",
+]
+
+VisualType = Literal["minimalist", "thematic", "generative"]
+
 class SlideData(TypedDict):
     hook_type: str       # "question" | "statistic" | "bold_claim" | "story" | "cta"
     text_content: str    # Main copy (up to 280 chars)
     caption: str         # Supporting context or subtitle
     image_prompt: str    # Detailed, style-specific image generation prompt
     emoji: str           # Contextual emoji for visual punch
+    text_zone: TextZone  # Where the overlay text will land
+    visual_type: VisualType  # Per-slide cost tier
 
 class GraphState(TypedDict):
     project_id: int
