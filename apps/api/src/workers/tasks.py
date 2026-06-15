@@ -125,8 +125,10 @@ async def _run_workflow_async(run_id: int):
             
             initial_state: GraphState = {
                 "project_id": project_id,
+                "creator_id": owner_id,
                 "keywords": keywords,
                 "industry": str(project.industry or ""),
+                "rag_context": None,
                 "search_queries": [],
                 "current_articles": [],
                 "retries": 0,
@@ -220,8 +222,10 @@ async def _run_article_regeneration_async(article_id: int):
             
             state: GraphState = {
                 "project_id": project_id,
+                "creator_id": cast(int, project.owner_id) if project and project.owner_id else 0,
                 "keywords": [k.keyword for k in project.keywords] if hasattr(project, "keywords") else [],
                 "industry": str(project.industry or ""),
+                "rag_context": None,
                 "search_queries": [],
                 "current_articles": [],
                 "retries": 0,
@@ -324,10 +328,10 @@ async def _run_image_generation_async(article_id: int):
             logger.error(f"Project not found for article {article_id}")
             return
 
-        if project.avoid_image_generation and not project.background_image_url:
-            raise ValueError("Project background image is not uploaded yet.")
-
         try:
+            if project.avoid_image_generation and not project.background_image_url:
+                raise ValueError("Project background image is not uploaded yet.")
+
             logger.info(f"Starting slide image generation for article {article_id} (Avoid AI: {project.avoid_image_generation})")
 
             if project.avoid_image_generation:

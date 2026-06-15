@@ -40,6 +40,10 @@ class Settings(BaseSettings):
     GOOGLE_API_KEY: str = ""
     GEMINI_MODEL: str = "gemma-4-31b-it"
     
+    # Qdrant Cloud
+    QDRANT_URL: str = ""
+    QDRANT_API_KEY: str = ""
+    
     # Cloudflare R2
     CLOUDFLARE_R2_ACCESS_KEY_ID: str = ""
     CLOUDFLARE_R2_SECRET_ACCESS_KEY: str = ""

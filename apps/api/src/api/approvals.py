@@ -100,13 +100,36 @@ async def approve_article(
     """
     Approve an article and mark it for publishing.
     """
-    return await _update_status(
+    response = await _update_status(
         article_id, 
         user_id, 
         "approved", 
         db, 
         "Article approved successfully"
     )
+
+    # Ingest the approved content into the RAG vector store for the creator
+    from models.core import Article, Project
+    from sqlalchemy.future import select
+    from sqlalchemy.orm import selectinload
+    
+    result = await db.execute(
+        select(Article)
+        .options(selectinload(Article.slides), selectinload(Article.project))
+        .where(Article.id == article_id)
+    )
+    article = result.scalar_one_or_none()
+    
+    if article and article.project and article.project.owner_id:
+        from services.rag import get_rag_service
+        rag_service = get_rag_service()
+        rag_service.ingest_approved_slides(
+            creator_id=article.project.owner_id,
+            slides=article.slides,
+            article_title=article.title
+        )
+        
+    return response
 
 @router.post("/{article_id}/reject", response_model=StatusUpdateResponse)
 async def reject_article(

@@ -28,8 +28,10 @@ class SlideData(TypedDict):
 
 class GraphState(TypedDict):
     project_id: int
+    creator_id: int
     keywords: List[str]
     industry: str
+    rag_context: Optional[str]
     
     # Research state
     search_queries: List[str]

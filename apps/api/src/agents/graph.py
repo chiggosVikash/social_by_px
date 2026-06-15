@@ -7,7 +7,8 @@ from .nodes import (
     query_refinement_agent,
     content_generation_agent,
     slide_verification_agent,
-    publishing_agent
+    publishing_agent,
+    rag_retrieval_agent
 )
 
 def should_refine(state: GraphState) -> str:
@@ -18,7 +19,7 @@ def should_refine(state: GraphState) -> str:
     if not approved_articles and retries < 3:
         return "refine"
     elif approved_articles:
-        return "generate"
+        return "rag_retrieval"
     else:
         return "end"
 
@@ -36,6 +37,7 @@ def build_graph() -> CompiledStateGraph[GraphState, None, GraphState, GraphState
     workflow.add_node("research", research_agent)
     workflow.add_node("verify", verification_agent)
     workflow.add_node("refine", query_refinement_agent)
+    workflow.add_node("rag_retrieval", rag_retrieval_agent)
     workflow.add_node("generate", content_generation_agent)
     workflow.add_node("verify_slides", slide_verification_agent)
     workflow.add_node("publish", publishing_agent)
@@ -49,12 +51,13 @@ def build_graph() -> CompiledStateGraph[GraphState, None, GraphState, GraphState
         should_refine,
         {
             "refine": "refine",
-            "generate": "generate",
+            "rag_retrieval": "rag_retrieval",
             "end": END
         }
     )
     
     workflow.add_edge("refine", "research")
+    workflow.add_edge("rag_retrieval", "generate")
     workflow.add_edge("generate", "verify_slides")
     
     workflow.add_conditional_edges(

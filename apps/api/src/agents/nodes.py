@@ -161,6 +161,19 @@ def verification_agent(state: GraphState) -> GraphState:
             
     return {**state, "approved_articles": approved}
 
+def rag_retrieval_agent(state: GraphState) -> GraphState:
+    """Retrieves domain and creator style context from Qdrant."""
+    creator_id = state.get("creator_id")
+    keywords = state.get("keywords", [])
+    industry = state.get("industry", "")
+    
+    if creator_id:
+        from services.rag import get_rag_service
+        rag_service = get_rag_service()
+        context = rag_service.retrieve_context(creator_id, keywords, industry)
+        return {**state, "rag_context": context}
+    return {**state, "rag_context": "Fallback context: Create professional, engaging content."}
+
 def query_refinement_agent(state: GraphState) -> GraphState:
     """Improves search quality after verification failures."""
     retries = state.get("retries", 0) + 1
@@ -205,6 +218,9 @@ def _get_tone_guidance(industry: str) -> str:
 _GENERATION_SYSTEM_PROMPT = """You are a world-class social media carousel content strategist. Your carousels consistently go viral because they follow a proven narrative arc.
 
 INDUSTRY TONE: {tone}
+
+CREATOR CONTEXT & TEMPLATES:
+{rag_context}
 
 CAROUSEL ARCHITECTURE (5 slides):
 - Slide 1 (HOOK): Stop the scroll. Use a provocative question, surprising statistic, or bold claim from the article. This slide MUST make someone pause mid-scroll.
@@ -255,6 +271,7 @@ def content_generation_agent(state: GraphState) -> GraphState:
     """Converts approved articles into premium carousel content using two-pass generation."""
     approved_articles = state.get("approved_articles", [])
     industry = state.get("industry", "general")
+    rag_context = state.get("rag_context", "")
     generated = {}
     tone = _get_tone_guidance(industry)
 
@@ -263,7 +280,7 @@ def content_generation_agent(state: GraphState) -> GraphState:
 
         # --- Pass 1: Draft generation ---
         draft_messages = [
-            SystemMessage(content=_GENERATION_SYSTEM_PROMPT.format(tone=tone)),
+            SystemMessage(content=_GENERATION_SYSTEM_PROMPT.format(tone=tone, rag_context=rag_context)),
             HumanMessage(content=f"Industry: {industry}\nTitle: {article['title']}\nSource: {article.get('source', 'Unknown')}\nPublished: {article.get('published_date', 'Recent')}\nSummary: {article['summary']}")
         ]
 

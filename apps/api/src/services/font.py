@@ -15,29 +15,22 @@ class FontService:
         font_path = os.path.join(font_dir, font_name)
         
         if not os.path.exists(font_path):
-            try:
-                logger.info(f"Downloading {font_name} from Google Fonts...")
-                url = f"https://github.com/google/fonts/raw/main/ofl/inter/static/{font_name}"
-                resp = httpx.get(url, follow_redirects=True, timeout=10.0)
-                if resp.status_code == 200:
-                    with open(font_path, "wb") as f:
-                        f.write(resp.content)
-                else:
-                    logger.warning(f"Failed to download font: HTTP {resp.status_code}")
-            except Exception as e:
-                logger.error(f"Failed to download font: {e}")
+            # The github URL for Inter is no longer serving raw TTF files directly.
+            pass
                 
         if os.path.exists(font_path):
             try:
                 return ImageFont.truetype(font_path, size)
             except Exception as e:
-                logger.error(f"Error loading truetype font: {e}")
+                logger.error(f"Error loading truetype font from {font_path}: {e}")
                 
         # Try system fallbacks
         fallbacks = [
+            "/System/Library/Fonts/Supplemental/Arial.ttf",
             "/System/Library/Fonts/Helvetica.ttc",
             "/System/Library/Fonts/Arial.ttf",
             "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+            "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
             "Arial.ttf"
         ]
         for fallback in fallbacks:
