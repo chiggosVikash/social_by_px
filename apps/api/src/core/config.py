@@ -38,6 +38,7 @@ class Settings(BaseSettings):
     # Gemini / Gemma
     GEMINI_API_KEY: str = ""
     GOOGLE_API_KEY: str = ""
+    COHERE_API_KEY: str = ""
     GEMINI_MODEL: str = "gemma-4-31b-it"
     
     # Qdrant Cloud

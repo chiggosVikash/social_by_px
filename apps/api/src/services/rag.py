@@ -1,11 +1,10 @@
 import logging
 from typing import List, Any, Optional
 
-from llama_index.core import Settings, Document, VectorStoreIndex, StorageContext
+from llama_index.core import Settings, Document, VectorStoreIndex, StorageContext, QueryBundle
 from llama_index.embeddings.google_genai import GoogleGenAIEmbedding
 from llama_index.vector_stores.qdrant import QdrantVectorStore
 from qdrant_client import QdrantClient
-from qdrant_client.http.models import Distance, VectorParams
 
 from core.config import get_settings
 
@@ -20,6 +19,7 @@ class RAGService:
     # [SOLID: DIP] Receive dependencies rather than creating them
     def __init__(self, client: Optional[QdrantClient]):
         self.client = client
+        self.settings = get_settings()
 
     def seed_initial_templates(self):
         """Seed Qdrant with narrative blueprints and templates."""
@@ -38,7 +38,8 @@ class RAGService:
         ]
         
         try:
-            vector_store = QdrantVectorStore(client=self.client, collection_name=TEMPLATE_COLLECTION)
+            # enable_hybrid=True configures FastEmbed sparse vectors (BM25/SPLADE) alongside Gemini dense vectors
+            vector_store = QdrantVectorStore(client=self.client, collection_name=TEMPLATE_COLLECTION, enable_hybrid=True)
             storage_context = StorageContext.from_defaults(vector_store=vector_store)
             VectorStoreIndex.from_documents(
                 templates, storage_context=storage_context
@@ -50,7 +51,7 @@ class RAGService:
     def retrieve_context(self, creator_id: int, keywords: List[str], industry: str) -> str:
         """
         Pull templates, domain knowledge, and creator writing style.
-        Uses metadata filtering to isolate the creator's history.
+        Uses Hybrid Search (Vector + Sparse) and Cohere Reranking.
         """
         if not self.client:
             return "Fallback context: Create professional, engaging content based on the provided keywords."
@@ -58,19 +59,37 @@ class RAGService:
         query = f"Industry: {industry}. Keywords: {', '.join(keywords)}"
         context_parts = []
         
+        reranker = None
+        if self.settings.COHERE_API_KEY:
+            try:
+                from llama_index.postprocessor.cohere_rerank import CohereRerank
+                reranker = CohereRerank(api_key=self.settings.COHERE_API_KEY, top_n=3)
+            except ImportError:
+                logger.warning("CohereRerank not available. Please install llama-index-postprocessor-cohere-rerank.")
+        
+        query_bundle = QueryBundle(query)
+
         try:
-            # 1. Retrieve structural templates
-            template_store = QdrantVectorStore(client=self.client, collection_name=TEMPLATE_COLLECTION)
+            # 1. Retrieve structural templates using Hybrid Search
+            template_store = QdrantVectorStore(client=self.client, collection_name=TEMPLATE_COLLECTION, enable_hybrid=True)
             template_index = VectorStoreIndex.from_vector_store(template_store)
-            template_retriever = template_index.as_retriever(similarity_top_k=2)
+            # Fetch top 10 from hybrid search
+            template_retriever = template_index.as_retriever(similarity_top_k=10)
             template_nodes = template_retriever.retrieve(query)
+            
+            # Rerank to top 3
+            if reranker and template_nodes:
+                template_nodes = reranker.postprocess_nodes(template_nodes, query_bundle)
+            elif template_nodes:
+                template_nodes = template_nodes[:3]
+
             if template_nodes:
                 context_parts.append("### Content Templates & Structures")
                 for node in template_nodes:
                     context_parts.append(f"- {node.text}")
 
             # 2. Retrieve Creator History (isolated by metadata)
-            creator_store = QdrantVectorStore(client=self.client, collection_name=CREATOR_COLLECTION)
+            creator_store = QdrantVectorStore(client=self.client, collection_name=CREATOR_COLLECTION, enable_hybrid=True)
             creator_index = VectorStoreIndex.from_vector_store(creator_store)
             
             from llama_index.core.vector_stores import ExactMatchFilter, MetadataFilters
@@ -78,8 +97,15 @@ class RAGService:
                 filters=[ExactMatchFilter(key="creator_id", value=creator_id)]
             )
             
-            creator_retriever = creator_index.as_retriever(similarity_top_k=3, filters=filters)
+            # Fetch top 10 from hybrid search
+            creator_retriever = creator_index.as_retriever(similarity_top_k=10, filters=filters)
             creator_nodes = creator_retriever.retrieve(query)
+            
+            # Rerank to top 3
+            if reranker and creator_nodes:
+                creator_nodes = reranker.postprocess_nodes(creator_nodes, query_bundle)
+            elif creator_nodes:
+                creator_nodes = creator_nodes[:3]
             
             if creator_nodes:
                 context_parts.append("\n### Creator Writing Style & Past Successes")
@@ -94,7 +120,7 @@ class RAGService:
 
     def ingest_approved_slides(self, creator_id: int, slides: List[Any], article_title: str) -> None:
         """
-        Insert approved slides into Qdrant with `creator_id` metadata.
+        Insert approved slides into Qdrant with `creator_id` metadata using Hybrid indexing.
         """
         if not self.client:
             return
@@ -114,7 +140,7 @@ class RAGService:
             documents.append(doc)
 
         try:
-            vector_store = QdrantVectorStore(client=self.client, collection_name=CREATOR_COLLECTION)
+            vector_store = QdrantVectorStore(client=self.client, collection_name=CREATOR_COLLECTION, enable_hybrid=True)
             storage_context = StorageContext.from_defaults(vector_store=vector_store)
             VectorStoreIndex.from_documents(
                 documents, storage_context=storage_context
@@ -149,14 +175,9 @@ def get_rag_service() -> RAGService:
             logger.warning("No Qdrant credentials found. Falling back to in-memory Qdrant.")
             client = QdrantClient(":memory:")
 
-        # [YAGNI] Removed speculative domain_index
-        collections = [TEMPLATE_COLLECTION, CREATOR_COLLECTION]
-        for col in collections:
-            if not client.collection_exists(collection_name=col):
-                client.create_collection(
-                    collection_name=col,
-                    vectors_config=VectorParams(size=768, distance=Distance.COSINE),
-                )
+        # We defer collection creation to QdrantVectorStore so it can properly set up
+        # the sparse vector configuration (enable_hybrid=True) automatically.
+
     except Exception as e:
         logger.error(f"Failed to setup Qdrant client: {e}")
 
