@@ -226,7 +226,7 @@ RESPOND WITH ONLY a valid JSON array of 5 objects:
     "hook_type": "question" | "statistic" | "bold_claim" | "story" | "cta",
     "text_content": "The main copy for this slide",
     "caption": "Supporting context or subtitle (optional, keep under 100 chars)",
-    "image_prompt": "A detailed prompt for generating a matching visual. Include style, mood, colors, composition.",
+    "image_prompt": "A CREATIVE DIRECTION brief (one line per field) describing the background composition. Use this template: ROLE: <hook|context|insight|proof|cta> | PALETTE: <2-3 colors> | FOCAL: <main visual element> | TEXT_ZONE: <center-bottom third | full center | lower-left aligned | right half clear> | COMPOSITION: <what's in the text zone> | REFERENCE: <1-2 real references like Substack, Linear, Are.na, Kinfolk, Pinterest editorial, magazine spread, Goop, Bloomberg, Apple keynote> | MOOD: <1-2 words> | AVOID: <faces, stock photos, neon, AI-glossy renders, busy collages, AND no text/letters/words in the image>. The image is a SLIDE BACKGROUND (1080x1080). Real text overlays later in a brand font. Image must support, not compete with, that text.",
     "emoji": "A single emoji that fits this slide's energy"
   }}
 ]"""
@@ -241,6 +241,7 @@ Your job: sharpen every slide for MAXIMUM engagement. Apply these rules ruthless
 4. VOICE: Ensure the tone matches {industry} audiences — {tone}
 5. CTA: The final slide should spark genuine conversation, not feel like marketing.
 6. EMOJI: Verify each emoji adds meaning. Remove decorative ones.
+7. IMAGE BRIEF: The image_prompt must NEVER direct DALL-E to render text. DALL-E's job is to design a composed background with a clear empty text zone in the specified text_zone position. Real text is overlaid separately.
 
 ORIGINAL ARTICLE CONTEXT:
 Title: {title}
@@ -288,12 +289,55 @@ def content_generation_agent(state: GraphState) -> GraphState:
         except Exception as e:
             print(f"Failed to generate content for {article['url']}: {e}")
             # Structured fallback with proper slide architecture
+            # Each slide now carries a text_zone and visual_type for downstream
+            # image generation and rendering decisions.
+            _fb_palette = "cream, charcoal, warm terracotta"
             generated[article["url"]] = [
-                {"hook_type": "bold_claim", "text_content": article['title'], "caption": f"Source: {article.get('source', 'Unknown')}", "image_prompt": f"Bold typography on dark gradient background, {industry} aesthetic, modern and clean", "emoji": "🔥"},
-                {"hook_type": "story", "text_content": f"Here's why this matters for {industry} right now.", "caption": "", "image_prompt": f"Abstract visualization of {industry} trends, sleek minimal design", "emoji": "💡"},
-                {"hook_type": "statistic", "text_content": article.get('summary', 'Key insight from this story.')[:280], "caption": "", "image_prompt": f"Data visualization infographic style, {industry} color palette", "emoji": "📊"},
-                {"hook_type": "story", "text_content": "The implications are bigger than most people realize.", "caption": "", "image_prompt": f"Futuristic perspective shot, {industry} themed, cinematic lighting", "emoji": "🚀"},
-                {"hook_type": "cta", "text_content": "What's your take? Drop your thoughts below 👇", "caption": "", "image_prompt": f"Conversation bubbles, community discussion visual, {industry} branding", "emoji": "💬"},
+                {
+                    "hook_type": "bold_claim",
+                    "text_content": article['title'],
+                    "caption": f"Source: {article.get('source', 'Unknown')}",
+                    "image_prompt": f"ROLE: hook | PALETTE: {_fb_palette} | FOCAL: bold typography metaphor | TEXT_ZONE: full center | COMPOSITION: negative space | REFERENCE: Substack hero, Apple keynote minimal | MOOD: quiet authority | AVOID: faces, stock photos, neon, text/letters",
+                    "emoji": "🔥",
+                    "text_zone": "full center",
+                    "visual_type": "generative",
+                },
+                {
+                    "hook_type": "story",
+                    "text_content": f"Here's why this matters for {industry} right now.",
+                    "caption": "",
+                    "image_prompt": f"ROLE: context | PALETTE: {_fb_palette} | FOCAL: abstract trend visualization | TEXT_ZONE: center-bottom third | COMPOSITION: soft gradient | REFERENCE: Pinterest editorial | MOOD: considerate | AVOID: faces, stock photos, neon, text/letters",
+                    "emoji": "💡",
+                    "text_zone": "center-bottom third",
+                    "visual_type": "minimalist",
+                },
+                {
+                    "hook_type": "statistic",
+                    "text_content": article.get('summary', 'Key insight from this story.')[:280],
+                    "caption": "",
+                    "image_prompt": f"ROLE: insight | PALETTE: {_fb_palette} | FOCAL: data point visualization | TEXT_ZONE: center-bottom third | COMPOSITION: abstract infographic | REFERENCE: Bloomberg Pursuits | MOOD: authoritative | AVOID: faces, stock photos, neon, text/letters",
+                    "emoji": "📊",
+                    "text_zone": "center-bottom third",
+                    "visual_type": "minimalist",
+                },
+                {
+                    "hook_type": "story",
+                    "text_content": "The implications are bigger than most people realize.",
+                    "caption": "",
+                    "image_prompt": f"ROLE: proof | PALETTE: {_fb_palette} | FOCAL: perspective shot | TEXT_ZONE: center-bottom third | COMPOSITION: futuristic layering | REFERENCE: Linear docs style | MOOD: forward-looking | AVOID: faces, stock photos, neon, text/letters",
+                    "emoji": "🚀",
+                    "text_zone": "center-bottom third",
+                    "visual_type": "minimalist",
+                },
+                {
+                    "hook_type": "cta",
+                    "text_content": "What's your take? Drop your thoughts below 👇",
+                    "caption": "",
+                    "image_prompt": f"ROLE: cta | PALETTE: {_fb_palette} | FOCAL: conversation prompt | TEXT_ZONE: lower-left aligned | COMPOSITION: clear negative space | REFERENCE: social comment bubbles | MOOD: engaged | AVOID: faces, stock photos, neon, text/letters",
+                    "emoji": "💬",
+                    "text_zone": "lower-left aligned",
+                    "visual_type": "minimalist",
+                },
             ]
 
     return {**state, "generated_slides": generated}
@@ -309,7 +353,11 @@ def slide_verification_agent(state: GraphState) -> GraphState:
         for slide in slides:
             text = slide.get("text_content", "")
             # Verify: has content, within character limit, has required fields
-            if 10 < len(text) < 300 and slide.get("hook_type") and slide.get("image_prompt"):
+            if (10 < len(text) < 300
+                and slide.get("hook_type")
+                and slide.get("image_prompt")
+                and slide.get("text_zone") in {"center-bottom third", "full center", "lower-left aligned", "right half clear"}
+                and slide.get("visual_type") in {"minimalist", "thematic", "generative"}):
                 valid_slides.append(slide)
         # Only approve if we have at least 3 valid slides
         if len(valid_slides) >= 3:

@@ -74,10 +74,10 @@ def test_content_generation_agent(initial_state):
 def test_slide_verification_agent(initial_state):
     initial_state["generated_slides"] = {
         "http://test1.com": [
-            {"text_content": "Valid short text 1", "image_prompt": "Img", "hook_type": "question"},
-            {"text_content": "Valid short text 2", "image_prompt": "Img", "hook_type": "statistic"},
-            {"text_content": "Valid short text 3", "image_prompt": "Img", "hook_type": "bold_claim"},
-            {"text_content": "x" * 300, "image_prompt": "Too long text", "hook_type": "cta"}
+            {"text_content": "Valid short text 1", "image_prompt": "Img", "hook_type": "question", "text_zone": "center-bottom third", "visual_type": "minimalist"},
+            {"text_content": "Valid short text 2", "image_prompt": "Img", "hook_type": "statistic", "text_zone": "full center", "visual_type": "thematic"},
+            {"text_content": "Valid short text 3", "image_prompt": "Img", "hook_type": "bold_claim", "text_zone": "lower-left aligned", "visual_type": "generative"},
+            {"text_content": "x" * 300, "image_prompt": "Too long text", "hook_type": "cta", "text_zone": "right half clear", "visual_type": "minimalist"}
         ]
     }
     new_state = slide_verification_agent(initial_state)
@@ -151,3 +151,144 @@ def test_visual_type_literal_values():
 
     types: list[VisualType] = ["minimalist", "thematic", "generative"]
     assert len(types) == 3
+
+
+def test_verification_rejects_slide_missing_text_zone():
+    """slide_verification_agent should reject slides missing text_zone."""
+    from agents.nodes import slide_verification_agent
+    from agents.state import GraphState
+
+    state: GraphState = {
+        "project_id": 1,
+        "keywords": ["test"],
+        "industry": "technology",
+        "approved_articles": [],
+        "generated_slides": {
+            "https://example.com/article1": [
+                {
+                    "hook_type": "question",
+                    "text_content": "Valid text 1",
+                    "caption": "",
+                    "image_prompt": "test",
+                    "emoji": "🔥",
+                    # Missing text_zone!
+                    "visual_type": "minimalist",
+                },
+                {
+                    "hook_type": "statistic",
+                    "text_content": "Valid text 2",
+                    "caption": "",
+                    "image_prompt": "test",
+                    "emoji": "📊",
+                    "text_zone": "full center",
+                    "visual_type": "thematic",
+                },
+                {
+                    "hook_type": "bold_claim",
+                    "text_content": "Valid text 3",
+                    "caption": "",
+                    "image_prompt": "test",
+                    "emoji": "💡",
+                    "text_zone": "lower-left aligned",
+                    "visual_type": "generative",
+                },
+            ]
+        },
+    }
+
+    result = slide_verification_agent(state)
+    assert "https://example.com/article1" not in result["approved_slides"]
+
+
+def test_verification_rejects_slide_missing_visual_type():
+    """slide_verification_agent should reject slides missing visual_type."""
+    from agents.nodes import slide_verification_agent
+    from agents.state import GraphState
+
+    state: GraphState = {
+        "project_id": 1,
+        "keywords": ["test"],
+        "industry": "technology",
+        "approved_articles": [],
+        "generated_slides": {
+            "https://example.com/article1": [
+                {
+                    "hook_type": "question",
+                    "text_content": "Valid text 1",
+                    "caption": "",
+                    "image_prompt": "test",
+                    "emoji": "🔥",
+                    "text_zone": "center-bottom third",
+                    # Missing visual_type!
+                },
+                {
+                    "hook_type": "statistic",
+                    "text_content": "Valid text 2",
+                    "caption": "",
+                    "image_prompt": "test",
+                    "emoji": "📊",
+                    "text_zone": "full center",
+                    "visual_type": "thematic",
+                },
+                {
+                    "hook_type": "bold_claim",
+                    "text_content": "Valid text 3",
+                    "caption": "",
+                    "image_prompt": "test",
+                    "emoji": "💡",
+                    "text_zone": "lower-left aligned",
+                    "visual_type": "generative",
+                },
+            ]
+        },
+    }
+
+    result = slide_verification_agent(state)
+    assert "https://example.com/article1" not in result["approved_slides"]
+
+
+def test_verification_accepts_complete_slide():
+    """slide_verification_agent should accept slides with all fields valid."""
+    from agents.nodes import slide_verification_agent
+    from agents.state import GraphState
+
+    state: GraphState = {
+        "project_id": 1,
+        "keywords": ["test"],
+        "industry": "technology",
+        "approved_articles": [],
+        "generated_slides": {
+            "https://example.com/article1": [
+                {
+                    "hook_type": "question",
+                    "text_content": "Valid text 1",
+                    "caption": "",
+                    "image_prompt": "test",
+                    "emoji": "🔥",
+                    "text_zone": "center-bottom third",
+                    "visual_type": "minimalist",
+                },
+                {
+                    "hook_type": "statistic",
+                    "text_content": "Valid text 2",
+                    "caption": "",
+                    "image_prompt": "test",
+                    "emoji": "📊",
+                    "text_zone": "full center",
+                    "visual_type": "thematic",
+                },
+                {
+                    "hook_type": "bold_claim",
+                    "text_content": "Valid text 3",
+                    "caption": "",
+                    "image_prompt": "test",
+                    "emoji": "💡",
+                    "text_zone": "lower-left aligned",
+                    "visual_type": "generative",
+                },
+            ]
+        },
+    }
+
+    result = slide_verification_agent(state)
+    assert "https://example.com/article1" in result["approved_slides"]
