@@ -143,7 +143,7 @@ class DalleSlideImageStrategy(SlideImageGenerationStrategy):
             f"STYLE LOCK: {preset.style}\n"
             f"COLOR PALETTE (use ONLY these, with at most 20% accent): "
             f"{', '.join(preset.palette)}\n"
-            f"LEAVE A CLEAR {slide.text_zone.upper()} zone empty for text overlay.\n"
+            f"LEAVE A CLEAR {(slide.text_zone or 'center-bottom third').upper()} zone empty for text overlay.\n"
             f"DO NOT include any text, letters, words, or typography in the image.\n"
             f"NO faces, no people, no stock photos, no neon gradients, "
             f"no glossy AI-render look, no busy collages."
