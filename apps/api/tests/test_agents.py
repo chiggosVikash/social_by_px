@@ -93,22 +93,61 @@ def test_conditional_edges(initial_state):
     state1["approved_articles"] = []
     state1["retries"] = 1
     assert should_refine(state1) == "refine"
-    
+
     state2 = initial_state.copy()
     # Adding mock keys to pass type checking for ArticleData if it's strict
     state2["approved_articles"] = [{"title": "Art", "url": "", "source": "", "published_date": "", "summary": ""}]
     state2["retries"] = 1
     assert should_refine(state2) == "generate"
-    
+
     state3 = initial_state.copy()
     state3["approved_articles"] = []
     state3["retries"] = 3
     assert should_refine(state3) == "end"
-    
+
     state4 = initial_state.copy()
     state4["approved_slides"] = {"http://": []}
     assert is_content_valid(state4) == "publish"
-    
+
     state5 = initial_state.copy()
     state5["approved_slides"] = {}
     assert is_content_valid(state5) == "regenerate"
+
+
+def test_slide_data_has_text_zone_and_visual_type():
+    """SlideData TypedDict should include text_zone and visual_type fields."""
+    from agents.state import SlideData, TextZone, VisualType
+
+    slide_data: SlideData = {
+        "hook_type": "question",
+        "text_content": "Test content",
+        "caption": "Test caption",
+        "image_prompt": "Test prompt",
+        "emoji": "🔥",
+        "text_zone": "full center",
+        "visual_type": "generative",
+    }
+
+    assert slide_data["text_zone"] == "full center"
+    assert slide_data["visual_type"] == "generative"
+
+
+def test_text_zone_literal_values():
+    """TextZone Literal should allow the 4 valid values."""
+    from agents.state import TextZone
+
+    zones: list[TextZone] = [
+        "center-bottom third",
+        "full center",
+        "lower-left aligned",
+        "right half clear",
+    ]
+    assert len(zones) == 4
+
+
+def test_visual_type_literal_values():
+    """VisualType Literal should allow the 3 valid values."""
+    from agents.state import VisualType
+
+    types: list[VisualType] = ["minimalist", "thematic", "generative"]
+    assert len(types) == 3
